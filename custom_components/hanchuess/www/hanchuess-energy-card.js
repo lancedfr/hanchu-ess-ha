@@ -290,10 +290,10 @@ class HanchuessEnergyCard extends HTMLElement {
           color: var(--primary-text-color); font-size: 14px; box-sizing: border-box;
         }
         .field input::placeholder { color: var(--secondary-text-color); opacity: 0.6; }
-        .time-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .time-row input { flex: 1; padding: 8px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color); color: var(--primary-text-color); font-size: 14px; }
+        .time-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .time-row input { width: 60px; padding: 6px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color); color: var(--primary-text-color); font-size: 14px; text-align: center; box-sizing: border-box; cursor: pointer; }
         .time-row span { color: var(--secondary-text-color); }
-        .time-row .time-label { font-size: 13px; color: var(--secondary-text-color); min-width: 80px; }
+        .time-row .time-label { font-size: 13px; color: var(--secondary-text-color); min-width: 60px; }
         /* 自定义时间选择器样式 */
         .time-picker-overlay {
           position: fixed;
@@ -315,89 +315,65 @@ class HanchuessEnergyCard extends HTMLElement {
           padding: 16px;
           box-shadow: 0 4px 20px rgba(0,0,0,0.2);
           z-index: 1001;
-          min-width: 260px;
-          max-width: 320px;
+          width: 240px;
         }
         .time-picker-header {
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 500;
-          margin-bottom: 10px;
+          margin-bottom: 12px;
           text-align: center;
           color: var(--primary-text-color);
         }
-        .time-picker-body {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .time-picker-section {
-          border: 1px solid var(--divider-color);
-          border-radius: 6px;
-          padding: 8px 10px 6px;
-        }
-        .time-picker-section-title {
-          font-size: 12px;
-          font-weight: 500;
-          color: var(--primary-color);
-          margin-bottom: 6px;
-          text-align: center;
-        }
-        .time-picker-row {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        .time-picker-label {
-          font-size: 13px;
-          color: var(--secondary-text-color);
-          text-align: center;
-        }
-        .time-picker-slider-container {
+        .time-picker-selects {
           display: flex;
           align-items: center;
-          gap: 10px;
+          justify-content: center;
+          gap: 4px;
         }
-        .time-picker-slider-label {
-          font-size: 14px;
-          color: var(--primary-text-color);
-          min-width: 30px;
-          text-align: center;
-          font-variant-numeric: tabular-nums;
+        .time-picker-column {
+          height: 180px;
+          overflow-y: auto;
+          border: 1px solid var(--divider-color);
+          border-radius: 4px;
+          background: var(--card-background-color);
+          width: 60px;
+          scroll-behavior: smooth;
         }
-        .time-picker-slider {
-          flex: 1;
-          height: 6px;
-          -webkit-appearance: none;
-          appearance: none;
+        .time-picker-column::-webkit-scrollbar {
+          width: 4px;
+        }
+        .time-picker-column::-webkit-scrollbar-thumb {
           background: var(--divider-color);
-          border-radius: 3px;
-          outline: none;
+          border-radius: 2px;
         }
-        .time-picker-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--primary-color);
+        .time-picker-item {
+          padding: 4px 0;
+          text-align: center;
+          font-size: 14px;
           cursor: pointer;
-          border: 2px solid var(--card-background-color);
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          color: var(--primary-text-color);
+          transition: background 0.15s;
         }
-        .time-picker-slider::-moz-range-thumb {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--primary-color);
-          cursor: pointer;
-          border: 2px solid var(--card-background-color);
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        .time-picker-item:hover {
+          background: var(--primary-color, #03a9f4);
+          color: #fff;
+        }
+        .time-picker-item.selected {
+          background: var(--primary-color, #03a9f4);
+          color: #fff;
+          font-weight: 500;
+        }
+        .time-picker-separator {
+          font-size: 18px;
+          font-weight: 500;
+          color: var(--primary-text-color);
+          line-height: 180px;
         }
         .time-picker-buttons {
           display: flex;
           gap: 8px;
           justify-content: flex-end;
-          margin-top: 10px;
+          margin-top: 14px;
         }
         .time-picker-btn {
           padding: 8px 16px;
@@ -413,10 +389,6 @@ class HanchuessEnergyCard extends HTMLElement {
         .time-picker-btn.cancel {
           background: var(--secondary-background-color);
           color: var(--secondary-text-color);
-        }
-        .time-picker-single .time-picker-section {
-          border: none;
-          padding: 0;
         }
         .icon-btn {
           background: none; border: none; cursor: pointer; font-size: 18px; padding: 4px;
@@ -510,47 +482,14 @@ class HanchuessEnergyCard extends HTMLElement {
         <div class="time-picker-overlay" id="time_picker_overlay"></div>
         <div class="time-picker-dialog" id="time_picker_dialog" style="display:none">
           <div class="time-picker-header" id="time_picker_title">${_t(this._hass, 'select_time')}</div>
-          <div class="time-picker-body">
-            <!-- 开始时间 -->
-            <div class="time-picker-section" id="start_section">
-              <div class="time-picker-section-title">${_t(this._hass, 'select_start_time')}</div>
-              <div class="time-picker-row">
-                <div class="time-picker-label">${_t(this._hass, 'hour_label')}</div>
-                <div class="time-picker-slider-container">
-                  <span class="time-picker-slider-label" id="start_hour_label">00</span>
-                  <input type="range" class="time-picker-slider" id="start_hour_slider" min="0" max="23" value="0" step="1">
-                </div>
-              </div>
-              <div class="time-picker-row">
-                <div class="time-picker-label">${_t(this._hass, 'minute_label')}</div>
-                <div class="time-picker-slider-container">
-                  <span class="time-picker-slider-label" id="start_minute_label">00</span>
-                  <input type="range" class="time-picker-slider" id="start_minute_slider" min="0" max="59" value="0" step="1">
-                </div>
-              </div>
-            </div>
-            <!-- 结束时间 -->
-            <div class="time-picker-section" id="end_section">
-              <div class="time-picker-section-title">${_t(this._hass, 'select_end_time')}</div>
-              <div class="time-picker-row">
-                <div class="time-picker-label">${_t(this._hass, 'hour_label')}</div>
-                <div class="time-picker-slider-container">
-                  <span class="time-picker-slider-label" id="end_hour_label">00</span>
-                  <input type="range" class="time-picker-slider" id="end_hour_slider" min="0" max="23" value="0" step="1">
-                </div>
-              </div>
-              <div class="time-picker-row">
-                <div class="time-picker-label">${_t(this._hass, 'minute_label')}</div>
-                <div class="time-picker-slider-container">
-                  <span class="time-picker-slider-label" id="end_minute_label">00</span>
-                  <input type="range" class="time-picker-slider" id="end_minute_slider" min="0" max="59" value="0" step="1">
-                </div>
-              </div>
-            </div>
-            <div class="time-picker-buttons">
-              <button class="time-picker-btn cancel" id="time_picker_cancel">${_t(this._hass, 'cancel')}</button>
-              <button class="time-picker-btn confirm" id="time_picker_confirm">${_t(this._hass, 'confirm')}</button>
-            </div>
+          <div class="time-picker-selects">
+            <div class="time-picker-column" id="tp_hour">${Array.from({length:24},(_,i)=>`<div class="time-picker-item" data-value="${i}">${String(i).padStart(2,'0')}</div>`).join("")}</div>
+            <span class="time-picker-separator">:</span>
+            <div class="time-picker-column" id="tp_minute">${Array.from({length:60},(_,i)=>`<div class="time-picker-item" data-value="${i}">${String(i).padStart(2,'0')}</div>`).join("")}</div>
+          </div>
+          <div class="time-picker-buttons">
+            <button class="time-picker-btn cancel" id="time_picker_cancel">${_t(this._hass, 'cancel')}</button>
+            <button class="time-picker-btn confirm" id="time_picker_confirm">${_t(this._hass, 'confirm')}</button>
           </div>
         </div>
       </ha-card>
@@ -589,23 +528,18 @@ class HanchuessEnergyCard extends HTMLElement {
       this._confirmTimePicker();
     });
 
-    // 开始时间滑块事件监听
-    this.shadowRoot.getElementById("start_hour_slider").addEventListener("input", (e) => {
-      this.shadowRoot.getElementById("start_hour_label").textContent = e.target.value.toString().padStart(2, '0');
-    });
-    this.shadowRoot.getElementById("start_minute_slider").addEventListener("input", (e) => {
-      this.shadowRoot.getElementById("start_minute_label").textContent = e.target.value.toString().padStart(2, '0');
-    });
-
-    // 结束时间滑块事件监听
-    this.shadowRoot.getElementById("end_hour_slider").addEventListener("input", (e) => {
-      this.shadowRoot.getElementById("end_hour_label").textContent = e.target.value.toString().padStart(2, '0');
-    });
-    this.shadowRoot.getElementById("end_minute_slider").addEventListener("input", (e) => {
-      this.shadowRoot.getElementById("end_minute_label").textContent = e.target.value.toString().padStart(2, '0');
+    // 时间滚轮列表点击事件
+    ["tp_hour", "tp_minute"].forEach(id => {
+      this.shadowRoot.getElementById(id).addEventListener("click", (e) => {
+        const item = e.target.closest(".time-picker-item");
+        if (!item) return;
+        const col = this.shadowRoot.getElementById(id);
+        col.querySelectorAll(".time-picker-item").forEach(i => i.classList.remove("selected"));
+        item.classList.add("selected");
+      });
     });
 
-    // 时间输入框点击事件：点击时间行中的任意输入框，打开区间选择器
+    // 时间输入框点击事件
     this.shadowRoot.addEventListener("click", (e) => {
       if (e.target.classList.contains("time-input")) {
         this._showTimePicker(e.target);
@@ -1335,6 +1269,15 @@ class HanchuessEnergyCard extends HTMLElement {
     return false;
   }
 
+  // Check if there was already an overlap before changing the given input
+  _checkTimeOverlapWith(input, prevValue) {
+    const curValue = input.value;
+    input.value = prevValue;
+    const hadOverlap = this._checkTimeOverlap();
+    input.value = curValue;
+    return hadOverlap;
+  }
+
   async _submit() {
     const submitBtn = this.shadowRoot.getElementById("submit_btn");
     const statusMsg = this.shadowRoot.getElementById("status_msg");
@@ -1671,93 +1614,68 @@ class HanchuessEnergyCard extends HTMLElement {
 
   // 时间选择器方法
 
-  // 判断点击的时间输入框是否属于一个有时间区间的 time-row
-  _isRangeInput(timeInput) {
-    const timeRow = timeInput.closest(".time-row");
-    if (!timeRow) return false;
-    return !!timeRow.querySelector("input[data-time-type='start']") &&
-           !!timeRow.querySelector("input[data-time-type='end']");
-  }
-
   _showTimePicker(timeInput) {
-    const dialog = this.shadowRoot.getElementById("time_picker_dialog");
-    const startSection = this.shadowRoot.getElementById("start_section");
-    const endSection = this.shadowRoot.getElementById("end_section");
-    const titleEl = this.shadowRoot.getElementById("time_picker_title");
-
-    const isRange = this._isRangeInput(timeInput);
-
-    // 保存当前时间输入框及配对信息
-    this._currentTimeInput = timeInput;
-
-    if (isRange) {
-      // 区间模式：同时显示开始和结束时间
+    // If clicking end time in a time-row, always start with start time first
+    if (timeInput.dataset.timeType === "end") {
       const timeRow = timeInput.closest(".time-row");
-      const startInput = timeRow.querySelector("input[data-time-type='start']");
-      const endInput = timeRow.querySelector("input[data-time-type='end']");
-      this._timeRangeInputs = { start: startInput, end: endInput };
-
-      // 保存原始值用于回滚
-      this._timeRangePrevValues = {
-        start: startInput.value || "00:00",
-        end: endInput.value || "00:00",
-      };
-
-      // 解析并设置开始时间滑块
-      const [sH, sM] = (startInput.value || "00:00").split(":").map(Number);
-      this.shadowRoot.getElementById("start_hour_slider").value = sH || 0;
-      this.shadowRoot.getElementById("start_minute_slider").value = sM || 0;
-      this.shadowRoot.getElementById("start_hour_label").textContent = (sH || 0).toString().padStart(2, '0');
-      this.shadowRoot.getElementById("start_minute_label").textContent = (sM || 0).toString().padStart(2, '0');
-
-      // 解析并设置结束时间滑块
-      const [eH, eM] = (endInput.value || "00:00").split(":").map(Number);
-      this.shadowRoot.getElementById("end_hour_slider").value = eH || 0;
-      this.shadowRoot.getElementById("end_minute_slider").value = eM || 0;
-      this.shadowRoot.getElementById("end_hour_label").textContent = (eH || 0).toString().padStart(2, '0');
-      this.shadowRoot.getElementById("end_minute_label").textContent = (eM || 0).toString().padStart(2, '0');
-
-      // 显示两个 section
-      startSection.style.display = "";
-      endSection.style.display = "";
-      dialog.classList.remove("time-picker-single");
-      if (titleEl) titleEl.textContent = _t(this._hass, 'select_time');
-    } else {
-      // 单时间模式（折叠卡片内的单独时间输入）
-      this._timeRangeInputs = null;
-      this._timeRangePrevValues = null;
-
-      const currentValue = timeInput.value || "00:00";
-      const [hour, minute] = currentValue.split(":").map(Number);
-
-      // 只用开始时间滑块（复用为单时间滑块）
-      this.shadowRoot.getElementById("start_hour_slider").value = hour || 0;
-      this.shadowRoot.getElementById("start_minute_slider").value = minute || 0;
-      this.shadowRoot.getElementById("start_hour_label").textContent = (hour || 0).toString().padStart(2, '0');
-      this.shadowRoot.getElementById("start_minute_label").textContent = (minute || 0).toString().padStart(2, '0');
-
-      // 隐藏结束时间 section
-      startSection.style.display = "";
-      endSection.style.display = "none";
-      dialog.classList.add("time-picker-single");
-
-      // 标题
-      const timeType = timeInput.dataset.timeType;
-      if (titleEl) {
-        if (timeType === "start") {
-          titleEl.textContent = _t(this._hass, 'select_start_time');
-        } else if (timeType === "end") {
-          titleEl.textContent = _t(this._hass, 'select_end_time');
-        } else {
-          titleEl.textContent = _t(this._hass, 'select_time');
+      if (timeRow) {
+        const startInput = timeRow.querySelector("[data-time-type='start']");
+        if (startInput && startInput !== timeInput) {
+          this._showTimePicker(startInput);
+          return;
         }
       }
-
-      // 保存原始值
-      timeInput._prevValue = currentValue;
+      // In collapse layout: redirect to start time in same collapse body
+      const collapseBody = timeInput.closest("[data-body]");
+      if (collapseBody) {
+        const startInput = collapseBody.querySelector("[data-time-type='start']");
+        if (startInput && startInput !== timeInput) {
+          this._showTimePicker(startInput);
+          return;
+        }
+      }
     }
 
-    // 显示时间选择器
+    const titleEl = this.shadowRoot.getElementById("time_picker_title");
+    const hourCol = this.shadowRoot.getElementById("tp_hour");
+    const minuteCol = this.shadowRoot.getElementById("tp_minute");
+
+    this._currentTimeInput = timeInput;
+
+    // Parse current value
+    const currentValue = timeInput.value || "00:00";
+    const [hour, minute] = currentValue.split(":").map(Number);
+
+    // Highlight and scroll to selected hour
+    hourCol.querySelectorAll(".time-picker-item").forEach(item => {
+      item.classList.toggle("selected", parseInt(item.dataset.value) === (hour || 0));
+    });
+    const selHourItem = hourCol.querySelector(`.time-picker-item[data-value="${hour || 0}"]`);
+    if (selHourItem) selHourItem.scrollIntoView({ block: "center" });
+
+    // Highlight and scroll to selected minute
+    minuteCol.querySelectorAll(".time-picker-item").forEach(item => {
+      item.classList.toggle("selected", parseInt(item.dataset.value) === (minute || 0));
+    });
+    const selMinItem = minuteCol.querySelector(`.time-picker-item[data-value="${minute || 0}"]`);
+    if (selMinItem) selMinItem.scrollIntoView({ block: "center" });
+
+    // Set title based on time type
+    const timeType = timeInput.dataset.timeType;
+    if (titleEl) {
+      if (timeType === "start") {
+        titleEl.textContent = _t(this._hass, 'select_start_time');
+      } else if (timeType === "end") {
+        titleEl.textContent = _t(this._hass, 'select_end_time');
+      } else {
+        titleEl.textContent = _t(this._hass, 'select_time');
+      }
+    }
+
+    // Save original value for rollback
+    timeInput._prevValue = currentValue;
+
+    // Show picker
     this.shadowRoot.getElementById("time_picker_overlay").style.display = "block";
     this.shadowRoot.getElementById("time_picker_dialog").style.display = "block";
   }
@@ -1766,33 +1684,25 @@ class HanchuessEnergyCard extends HTMLElement {
     this.shadowRoot.getElementById("time_picker_overlay").style.display = "none";
     this.shadowRoot.getElementById("time_picker_dialog").style.display = "none";
     this._currentTimeInput = null;
-    this._timeRangeInputs = null;
-    this._timeRangePrevValues = null;
   }
 
   _confirmTimePicker() {
     if (!this._currentTimeInput) return;
 
-    if (this._timeRangeInputs) {
-      // 区间模式：同时设置开始和结束时间
-      this._confirmRangeTime();
-    } else {
-      // 单时间模式
-      this._confirmSingleTime();
-    }
-  }
-
-  _confirmSingleTime() {
     const input = this._currentTimeInput;
     const prevValue = input._prevValue || input.value;
 
-    const hour = parseInt(this.shadowRoot.getElementById("start_hour_slider").value) || 0;
-    const minute = parseInt(this.shadowRoot.getElementById("start_minute_slider").value) || 0;
+    const hourCol = this.shadowRoot.getElementById("tp_hour");
+    const minuteCol = this.shadowRoot.getElementById("tp_minute");
+    const selHour = hourCol.querySelector(".time-picker-item.selected");
+    const selMin = minuteCol.querySelector(".time-picker-item.selected");
+    const hour = selHour ? parseInt(selHour.dataset.value) : 0;
+    const minute = selMin ? parseInt(selMin.dataset.value) : 0;
     const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 
     input.value = formattedTime;
 
-    // 检查时间重叠
+    // Check overlap
     const hadOverlapBefore = this._checkTimeOverlapWith(input, prevValue);
     const hasOverlapNow = this._checkTimeOverlap();
     if (!hadOverlapBefore && hasOverlapNow) {
@@ -1806,52 +1716,27 @@ class HanchuessEnergyCard extends HTMLElement {
     input._prevValue = formattedTime;
     input.dispatchEvent(new Event('change', { bubbles: true }));
     this._hideTimePicker();
-  }
 
-  _confirmRangeTime() {
-    const { start: startInput, end: endInput } = this._timeRangeInputs;
-    const prevStart = this._timeRangePrevValues.start;
-    const prevEnd = this._timeRangePrevValues.end;
-
-    const sH = parseInt(this.shadowRoot.getElementById("start_hour_slider").value) || 0;
-    const sM = parseInt(this.shadowRoot.getElementById("start_minute_slider").value) || 0;
-    const eH = parseInt(this.shadowRoot.getElementById("end_hour_slider").value) || 0;
-    const eM = parseInt(this.shadowRoot.getElementById("end_minute_slider").value) || 0;
-
-    const newStart = `${sH.toString().padStart(2, '0')}:${sM.toString().padStart(2, '0')}`;
-    const newEnd = `${eH.toString().padStart(2, '0')}:${eM.toString().padStart(2, '0')}`;
-
-    // 临时设置新值用于重叠检查
-    startInput.value = newStart;
-    endInput.value = newEnd;
-
-    // 检查重叠：把两个值都回退到旧值，看之前是否已有重叠
-    startInput.value = prevStart;
-    endInput.value = prevEnd;
-    const hadOverlapBefore = this._checkTimeOverlap();
-
-    // 恢复新值
-    startInput.value = newStart;
-    endInput.value = newEnd;
-    const hasOverlapNow = this._checkTimeOverlap();
-
-    if (!hadOverlapBefore && hasOverlapNow) {
-      // 回滚
-      startInput.value = prevStart;
-      endInput.value = prevEnd;
-      startInput._prevValue = prevStart;
-      endInput._prevValue = prevEnd;
-      this._hideTimePicker();
-      this._showOverlapError();
-      return;
+    // If this was a start time, auto-advance to end time
+    if (input.dataset.timeType === "start") {
+      // In time-row layout
+      const timeRow = input.closest(".time-row");
+      if (timeRow) {
+        const endInput = timeRow.querySelector("[data-time-type='end']");
+        if (endInput) {
+          setTimeout(() => this._showTimePicker(endInput), 200);
+        }
+      } else {
+        // In collapse layout: find end time in same collapse body
+        const collapseBody = input.closest("[data-body]");
+        if (collapseBody) {
+          const endInput = collapseBody.querySelector("[data-time-type='end']");
+          if (endInput) {
+            setTimeout(() => this._showTimePicker(endInput), 200);
+          }
+        }
+      }
     }
-
-    // 接受新值
-    startInput._prevValue = newStart;
-    endInput._prevValue = newEnd;
-    startInput.dispatchEvent(new Event('change', { bubbles: true }));
-    endInput.dispatchEvent(new Event('change', { bubbles: true }));
-    this._hideTimePicker();
   }
 
   _showOverlapError() {
