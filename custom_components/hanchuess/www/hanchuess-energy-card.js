@@ -286,6 +286,82 @@ class HanchuessEnergyCard extends HTMLElement {
         .time-row input { flex: 1; padding: 8px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color); color: var(--primary-text-color); font-size: 14px; }
         .time-row span { color: var(--secondary-text-color); }
         .time-row .time-label { font-size: 13px; color: var(--secondary-text-color); min-width: 80px; }
+        /* 自定义时间选择器样式 */
+        .time-picker-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0,0,0,0.5);
+          z-index: 1000;
+          display: none;
+        }
+        .time-picker-dialog {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: var(--card-background-color);
+          border-radius: 8px;
+          padding: 20px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+          z-index: 1001;
+          min-width: 300px;
+        }
+        .time-picker-header {
+          font-size: 16px;
+          font-weight: 500;
+          margin-bottom: 16px;
+          text-align: center;
+          color: var(--primary-text-color);
+        }
+        .time-picker-body {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .time-picker-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .time-picker-label {
+          min-width: 80px;
+          font-size: 14px;
+          color: var(--secondary-text-color);
+        }
+        .time-picker-input {
+          flex: 1;
+          padding: 8px;
+          border: 1px solid var(--divider-color);
+          border-radius: 4px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          font-size: 16px;
+          text-align: center;
+        }
+        .time-picker-buttons {
+          display: flex;
+          gap: 8px;
+          justify-content: flex-end;
+          margin-top: 16px;
+        }
+        .time-picker-btn {
+          padding: 8px 16px;
+          border: none;
+          border-radius: 4px;
+          font-size: 14px;
+          cursor: pointer;
+        }
+        .time-picker-btn.confirm {
+          background: var(--primary-color);
+          color: white;
+        }
+        .time-picker-btn.cancel {
+          background: var(--secondary-background-color);
+          color: var(--secondary-text-color);
+        }
         .icon-btn {
           background: none; border: none; cursor: pointer; font-size: 18px; padding: 4px;
           color: var(--secondary-text-color); line-height: 1;
@@ -374,6 +450,26 @@ class HanchuessEnergyCard extends HTMLElement {
         <div id="dynamic_fields"></div>
 
         <div class="status" id="status_msg"></div>
+        
+        <!-- 自定义时间选择器 -->
+        <div class="time-picker-overlay" id="time_picker_overlay"></div>
+        <div class="time-picker-dialog" id="time_picker_dialog" style="display:none">
+          <div class="time-picker-header" id="time_picker_title">选择时间</div>
+          <div class="time-picker-body">
+            <div class="time-picker-row">
+              <span class="time-picker-label">小时</span>
+              <input type="number" class="time-picker-input" id="time_picker_hour" min="0" max="23" value="0">
+            </div>
+            <div class="time-picker-row">
+              <span class="time-picker-label">分钟</span>
+              <input type="number" class="time-picker-input" id="time_picker_minute" min="0" max="59" value="0">
+            </div>
+            <div class="time-picker-buttons">
+              <button class="time-picker-btn cancel" id="time_picker_cancel">${_t(this._hass, 'cancel')}</button>
+              <button class="time-picker-btn confirm" id="time_picker_confirm">${_t(this._hass, 'confirm')}</button>
+            </div>
+          </div>
+        </div>
       </ha-card>
     `;
 
@@ -397,9 +493,29 @@ class HanchuessEnergyCard extends HTMLElement {
       this._quickStop();
     });
 
+    // 时间选择器事件监听
+    this.shadowRoot.getElementById("time_picker_overlay").addEventListener("click", () => {
+      this._hideTimePicker();
+    });
+
+    this.shadowRoot.getElementById("time_picker_cancel").addEventListener("click", () => {
+      this._hideTimePicker();
+    });
+
+    this.shadowRoot.getElementById("time_picker_confirm").addEventListener("click", () => {
+      this._confirmTimePicker();
+    });
+
+    // 时间输入框点击事件
+    this.shadowRoot.addEventListener("click", (e) => {
+      if (e.target.classList.contains("time-input")) {
+        this._showTimePicker(e.target);
+      }
+    });
+
     // Save time input value before user edits, for overlap revert
     this.shadowRoot.getElementById("dynamic_fields").addEventListener("focusin", (e) => {
-      if (e.target.matches("[data-time-group] input[type='time']")) {
+      if (e.target.matches("[data-time-group] input.time-input")) {
         e.target._prevValue = e.target.value;
       }
     });
@@ -553,7 +669,7 @@ class HanchuessEnergyCard extends HTMLElement {
         const gk = code.startsWith("chg_tim") ? "chg" : code.startsWith("dschg_tim") ? "dschg" : code;
         const idx = (code.match(/(\d)$/) || [,"1"])[1];
         const fmt = field.format || "";
-        html += `<div class="${cls}" ${la} data-signal="${field.signal}" data-time-group="${gk}" data-time-index="${idx}" data-time-fmt="${fmt}"><div class="time-row"><span class="time-label">${field.name}</span><input type="time" data-signal="${sigs[0]||""}"><span>-</span><input type="time" data-signal="${sigs[1]||""}"><button class="icon-btn del" data-action="del-time" data-group="${gk}" data-index="${idx}">🗑</button><button class="icon-btn add" data-action="add-time" data-group="${gk}" data-index="${idx}" style="display:none">+</button></div></div>`;
+        html += `<div class="${cls}" ${la} data-signal="${field.signal}" data-time-group="${gk}" data-time-index="${idx}" data-time-fmt="${fmt}"><div class="time-row"><span class="time-label">${field.name}</span><input type="text" class="time-input" data-signal="${sigs[0]||""}" data-time-type="start" readonly><span>-</span><input type="text" class="time-input" data-signal="${sigs[1]||""}" data-time-type="end" readonly><button class="icon-btn del" data-action="del-time" data-group="${gk}" data-index="${idx}">🗑</button><button class="icon-btn add" data-action="add-time" data-group="${gk}" data-index="${idx}" style="display:none">+</button></div></div>`;
       }
 
       if (field.type === "collapse") {
@@ -567,7 +683,7 @@ class HanchuessEnergyCard extends HTMLElement {
             const opts = (c.options||[]).map(o => `<option value="${o.value}">${o.name}</option>`).join("");
             bodyHtml += `<div class="collapse-row"><label><span class="req">*</span>${c.name}</label><select data-arr-signal="${sig}" data-arr-index="${ci}">${opts}</select></div>`;
           } else if (c.type === "5") {
-            bodyHtml += `<div class="collapse-row"><label><span class="req">*</span>${c.name}</label><input type="time" data-arr-signal="${sig}" data-arr-index="${ci}" data-arr-fmt="time"></div>`;
+            bodyHtml += `<div class="collapse-row"><label><span class="req">*</span>${c.name}</label><input type="text" class="time-input" data-arr-signal="${sig}" data-arr-index="${ci}" data-arr-fmt="time" readonly></div>`;
           } else if (c.type === "1") {
             const mn = c.min||"0", mx = c.max||"99999", cStep = c.step||1;
             bodyHtml += `<div class="collapse-row"><label><span class="req">*</span>${c.name}</label><input type="number" data-arr-signal="${sig}" data-arr-index="${ci}" data-step="${cStep}" min="${mn}" max="${mx}" step="${cStep}" placeholder="[${mn}, ${mx}]"></div>`;
@@ -619,7 +735,7 @@ class HanchuessEnergyCard extends HTMLElement {
       // Use setTimeout(0) to defer DOM manipulation until after the native
       // time picker has fully committed and closed; touching .value
       // synchronously inside a change handler confuses the picker UI.
-      const timeInput = e.target.closest("[data-time-group]") && e.target.matches("input[type='time']") ? e.target : null;
+      const timeInput = e.target.closest("[data-time-group]") && e.target.matches("input.time-input") ? e.target : null;
       if (timeInput) {
         const newVal = timeInput.value;
         const prevVal = timeInput._prevValue;
@@ -661,7 +777,7 @@ class HanchuessEnergyCard extends HTMLElement {
     container.querySelectorAll("input[data-signal]").forEach(input => {
       const signal = input.dataset.signal;
       if (signal && result[signal] !== undefined) {
-        if (input.type === "time") {
+        if (input.classList.contains("time-input")) {
           const v = String(result[signal]);
           if (v.includes(":")) input.value = v;
           else {
@@ -702,7 +818,7 @@ class HanchuessEnergyCard extends HTMLElement {
       try { arr = JSON.parse(result[sig]); } catch { return; }
       if (!Array.isArray(arr) || idx >= arr.length) return;
       const val = arr[idx];
-      if (el.type === "time" || el.dataset.arrFmt === "time") {
+      if (el.classList.contains("time-input") || el.dataset.arrFmt === "time") {
         const s = String(val).padStart(4, "0");
         el.value = s.slice(0,2) + ":" + s.slice(2,4);
       } else if (el.tagName === "SELECT") {
@@ -751,7 +867,7 @@ class HanchuessEnergyCard extends HTMLElement {
     const visibleValues = [];
     allSlots.forEach(slot => {
       if (slot.classList.contains("visible") && slot.dataset.timeHidden !== "true") {
-        const inputs = slot.querySelectorAll("input[type='time']");
+        const inputs = slot.querySelectorAll("input.time-input");
         visibleValues.push({
           start: inputs[0] ? inputs[0].value : "",
           end: inputs[1] ? inputs[1].value : "",
@@ -779,7 +895,7 @@ class HanchuessEnergyCard extends HTMLElement {
 
     // Redistribute values to slots 1, 2, 3
     allSlots.forEach((slot, i) => {
-      const inputs = slot.querySelectorAll("input[type='time']");
+      const inputs = slot.querySelectorAll("input.time-input");
       if (i < visibleValues.length) {
         inputs[0].value = visibleValues[i].start;
         inputs[1].value = visibleValues[i].end;
@@ -811,7 +927,7 @@ class HanchuessEnergyCard extends HTMLElement {
         slot.classList.add("visible");
         delete slot.dataset.timeHidden;
         // Set default values for new slot (00:00)
-        const inputs = slot.querySelectorAll("input[type='time']");
+        const inputs = slot.querySelectorAll("input.time-input");
         inputs.forEach(inp => { inp.value = "00:00"; });
         // 重要：设置_prevValue，以便时间重叠检查能正常工作
         inputs.forEach(inp => { inp._prevValue = "00:00"; });
@@ -983,7 +1099,7 @@ class HanchuessEnergyCard extends HTMLElement {
       inputs.forEach(input => {
         const signal = input.dataset.signal;
         if (signal && result[signal] !== undefined) {
-          if (input.type === "time") {
+          if (input.classList.contains("time-input")) {
             const v = String(result[signal]);
             if (v.includes(":")) {
               input.value = v;
@@ -1027,7 +1143,7 @@ class HanchuessEnergyCard extends HTMLElement {
         const val = arr[idx];
         if (el.type === "checkbox") {
           el.checked = String(val) === (el.dataset.on || "1");
-        } else if (el.type === "time" || el.dataset.arrFmt === "time") {
+        } else if (el.classList.contains("time-input") || el.dataset.arrFmt === "time") {
           const s = String(val).padStart(4, "0");
           el.value = s.slice(0,2) + ":" + s.slice(2,4);
         } else if (el.tagName === "SELECT") {
@@ -1073,7 +1189,7 @@ class HanchuessEnergyCard extends HTMLElement {
       // Handle time slot visibility
       const timeSlots = container.querySelectorAll("[data-time-group]");
       timeSlots.forEach(slot => {
-        const timeInputs = slot.querySelectorAll("input[type='time']");
+        const timeInputs = slot.querySelectorAll("input.time-input");
         const allZero = Array.from(timeInputs).every(inp => inp.value === "00:00");
         if (allZero && slot.dataset.timeIndex !== "1") {
           slot.classList.remove("visible");
@@ -1105,7 +1221,7 @@ class HanchuessEnergyCard extends HTMLElement {
     const slots = [];
     container.querySelectorAll(`[data-time-group="${group}"]`).forEach(slot => {
       if (!slot.classList.contains("visible") || slot.dataset.timeHidden === "true") return;
-      const inputs = slot.querySelectorAll("input[type='time']");
+      const inputs = slot.querySelectorAll("input.time-input");
       if (inputs.length < 2) return;
       const startStr = inputs[0].value;
       const endStr = inputs[1].value;
@@ -1203,7 +1319,7 @@ class HanchuessEnergyCard extends HTMLElement {
         const signal = input.dataset.signal;
         if (!signal) return;
         let newVal;
-        if (input.type === "time") {
+        if (input.classList.contains("time-input")) {
           const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
           if (fmt.includes("HH") || fmt.includes("hh")) {
             newVal = this._timeToSignal(input.value || "00:00");
@@ -1232,7 +1348,7 @@ class HanchuessEnergyCard extends HTMLElement {
     const allTimeSlots = container.querySelectorAll("[data-time-group]");
     allTimeSlots.forEach(slot => {
       if (slot.dataset.timeHidden === "true") {
-        const inputs = slot.querySelectorAll("input[type='time']");
+        const inputs = slot.querySelectorAll("input.time-input");
         inputs.forEach(input => {
           const signal = input.dataset.signal;
           if (signal && this._originalValues[signal] && String(this._originalValues[signal]) !== "0") {
@@ -1252,7 +1368,7 @@ class HanchuessEnergyCard extends HTMLElement {
       inputs.forEach(input => {
         const signal = input.dataset.signal;
         if (!signal) return;
-        if (input.type === "time") {
+        if (input.classList.contains("time-input")) {
           const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
           if (fmt.includes("HH") || fmt.includes("hh")) {
             valueMap[signal] = this._timeToSignal(input.value || "00:00");
@@ -1283,7 +1399,7 @@ class HanchuessEnergyCard extends HTMLElement {
           const idx = parseInt(el.dataset.arrIndex);
           if (isNaN(idx)) return;
           let val;
-          if (el.type === "time" || el.dataset.arrFmt === "time") {
+          if (el.classList.contains("time-input") || el.dataset.arrFmt === "time") {
             val = (el.value || "00:00").replace(":", "");
           } else if (el.type === "number") {
             val = el.value;
@@ -1309,7 +1425,7 @@ class HanchuessEnergyCard extends HTMLElement {
     // Collect deleted time slots (send 0)
     allTimeSlots.forEach(slot => {
       if (slot.dataset.timeHidden === "true") {
-        const inputs = slot.querySelectorAll("input[type='time']");
+        const inputs = slot.querySelectorAll("input.time-input");
         const hasOrig = Array.from(inputs).some(inp => {
           const sig = inp.dataset.signal;
           return sig && this._originalValues[sig] && String(this._originalValues[sig]) !== "0";
@@ -1345,7 +1461,7 @@ class HanchuessEnergyCard extends HTMLElement {
       container.querySelectorAll("input[data-signal]").forEach(input => {
         const signal = input.dataset.signal;
         if (!signal || !input.value) return;
-        if (input.type === "time") {
+        if (input.classList.contains("time-input")) {
           const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
           if (fmt.includes("HH") || fmt.includes("hh")) {
             this._originalValues[signal] = this._timeToSignal(input.value || "00:00");
@@ -1477,6 +1593,86 @@ class HanchuessEnergyCard extends HTMLElement {
     }
     if (stopBtn) stopBtn.style.pointerEvents = "";
     setTimeout(() => { statusEl.textContent = ""; }, 3000);
+  }
+
+  // 时间选择器方法
+  _showTimePicker(timeInput) {
+    this._currentTimeInput = timeInput;
+    
+    // 解析当前时间
+    const currentValue = timeInput.value || "00:00";
+    const [hour, minute] = currentValue.split(":").map(Number);
+    
+    // 设置时间选择器的值
+    this.shadowRoot.getElementById("time_picker_hour").value = hour || 0;
+    this.shadowRoot.getElementById("time_picker_minute").value = minute || 0;
+    
+    // 设置标题
+    const isStart = timeInput.dataset.timeType === "start";
+    const title = this.shadowRoot.getElementById("time_picker_title");
+    if (title) {
+      title.textContent = isStart ? "选择开始时间" : "选择结束时间";
+    }
+    
+    // 显示时间选择器
+    this.shadowRoot.getElementById("time_picker_overlay").style.display = "block";
+    this.shadowRoot.getElementById("time_picker_dialog").style.display = "block";
+    
+    // 保存原始值用于回滚
+    timeInput._prevValue = currentValue;
+  }
+
+  _hideTimePicker() {
+    this.shadowRoot.getElementById("time_picker_overlay").style.display = "none";
+    this.shadowRoot.getElementById("time_picker_dialog").style.display = "none";
+    this._currentTimeInput = null;
+  }
+
+  _confirmTimePicker() {
+    if (!this._currentTimeInput) return;
+    
+    const hour = parseInt(this.shadowRoot.getElementById("time_picker_hour").value) || 0;
+    const minute = parseInt(this.shadowRoot.getElementById("time_picker_minute").value) || 0;
+    
+    // 格式化时间为 HH:MM
+    const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    
+    // 设置时间输入框的值
+    this._currentTimeInput.value = formattedTime;
+    
+    // 触发change事件
+    this._currentTimeInput.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // 如果是开始时间，自动聚焦到结束时间
+    if (this._currentTimeInput.dataset.timeType === "start") {
+      const timeRow = this._currentTimeInput.closest(".time-row");
+      if (timeRow) {
+        const endInput = timeRow.querySelector("[data-time-type='end']");
+        if (endInput) {
+          // 延迟一点时间，让用户看到开始时间已经设置
+          setTimeout(() => {
+            this._showTimePicker(endInput);
+          }, 300);
+        }
+      }
+    } else {
+      // 如果是结束时间，检查时间重叠
+      this._checkAndHandleTimeOverlap();
+    }
+    
+    this._hideTimePicker();
+  }
+
+  _checkAndHandleTimeOverlap() {
+    // 检查时间重叠
+    if (this._checkTimeOverlap()) {
+      const statusMsg = this.shadowRoot.getElementById("status_msg");
+      if (statusMsg) {
+        statusMsg.textContent = _t(this._hass, 'time_overlap');
+        statusMsg.className = "status error";
+        setTimeout(() => { statusMsg.textContent = ""; }, 4000);
+      }
+    }
   }
 
   getCardSize() {

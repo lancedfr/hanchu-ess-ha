@@ -9,3 +9,5 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+custom_components/hanchuess/www/hanchuess-energy-card.js.backup
+test_time_picker.html
