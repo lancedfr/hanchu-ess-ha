@@ -172,6 +172,10 @@ class HanchuessEnergyCard extends HTMLElement {
     this._originalValues = {};
     this._dataLoaded = false;
     this._localStartTime = 0;
+    this._localFastStatus = 0;
+    this._localRemainSec = 0;
+    this._localCountdown = null;
+    this._forceStopped = false;
   }
 
   static getConfigElement() {
@@ -432,12 +436,28 @@ class HanchuessEnergyCard extends HTMLElement {
       // server hasn't caught up yet, treat as idle
     } else {
       this._forceStopped = false;
+      // 修复：当页面刷新或重新加载时，如果服务器显示正在运行，应该恢复本地状态
       if (serverRemain > 0 && (fastStatus === 1 || fastStatus === 2)) {
         this._localRemainSec = serverRemain;
-        // Do NOT restore _localFastStatus from server here.
-        // _localFastStatus is only set locally (on start/stop), so when it
-        // reaches 0 the isRunning fallback uses raw fastStatus from the server.
-        // If we re-set it here, fastStatus=0 from the server can never clear it.
+        // 重要：当服务器显示正在运行时，需要恢复_localFastStatus
+        // 否则页面刷新后状态会丢失
+        if (!this._localFastStatus) {
+          this._localFastStatus = fastStatus;
+          this._localStartTime = Date.now() - ((serverRemain - 1) * 1000); // 估算开始时间
+          // 启动本地倒计时（每分钟更新一次）
+          if (this._localCountdown) clearInterval(this._localCountdown);
+          this._localCountdown = setInterval(() => {
+            this._localRemainSec -= 60;
+            if (this._localRemainSec <= 0) {
+              this._localRemainSec = 0;
+              this._localFastStatus = 0;
+              this._localStartTime = 0;
+              clearInterval(this._localCountdown);
+              this._localCountdown = null;
+            }
+            this._updateStatus();
+          }, 60000);
+        }
       } else if (this._localFastStatus && fastStatus !== 1 && fastStatus !== 2) {
         // Server says not running. Only trust this once the 30s grace period
         // has passed (device needs time to process the command before the server
@@ -477,6 +497,7 @@ class HanchuessEnergyCard extends HTMLElement {
     } else {
       this._localFastStatus = 0;
       this._localRemainSec = 0;
+      this._localStartTime = 0;
       if (this._localCountdown) { clearInterval(this._localCountdown); this._localCountdown = null; }
       if (quickRunning) quickRunning.style.display = "none";
       if (quickBtns) quickBtns.style.display = "flex";
@@ -593,11 +614,38 @@ class HanchuessEnergyCard extends HTMLElement {
         }
       }
 
-      // Real-time overlap check for time inputs in chg/dschg groups
+      // Real-time overlap check for time inputs in chg/dschg groups.
+      // Only revert if this specific change INTRODUCED a new overlap.
+      // Use setTimeout(0) to defer DOM manipulation until after the native
+      // time picker has fully committed and closed; touching .value
+      // synchronously inside a change handler confuses the picker UI.
       const timeInput = e.target.closest("[data-time-group]") && e.target.matches("input[type='time']") ? e.target : null;
       if (timeInput) {
-        if (this._checkTimeOverlap()) {
-          timeInput.value = timeInput._prevValue || timeInput.value;
+        const newVal = timeInput.value;
+        const prevVal = timeInput._prevValue;
+        if (prevVal !== undefined && prevVal !== newVal) {
+          setTimeout(() => {
+            if (timeInput.value !== newVal) return; // user changed again — skip
+            timeInput.value = prevVal;
+            const hadOverlapBefore = this._checkTimeOverlap();
+            timeInput.value = newVal;
+            if (!hadOverlapBefore && this._checkTimeOverlap()) {
+              // This change introduced a new overlap — revert
+              timeInput.value = prevVal;
+              // 重要：恢复后需要更新_prevValue为恢复后的值
+              timeInput._prevValue = prevVal;
+              // 显示错误提示
+              const statusMsg = this.shadowRoot.getElementById("status_msg");
+              if (statusMsg) {
+                statusMsg.textContent = _t(this._hass, 'time_overlap');
+                statusMsg.className = "status error";
+                setTimeout(() => { statusMsg.textContent = ""; }, 4000);
+              }
+            } else {
+              // No new overlap (or overlap pre-existed) — accept, update saved value
+              timeInput._prevValue = newVal;
+            }
+          }, 0);
         }
       }
     };
@@ -625,6 +673,8 @@ class HanchuessEnergyCard extends HTMLElement {
               input.value = s.slice(0,2) + ":" + s.slice(2,4);
             }
           }
+          // 重要：设置_prevValue，以便时间重叠检查能正常工作
+          input._prevValue = input.value;
         } else if (input.type === "checkbox") {
           input.checked = String(result[signal]) === (input.dataset.on || "1");
         } else if (signal === "MIN_THRESH_CHG_DUR") {
@@ -733,11 +783,17 @@ class HanchuessEnergyCard extends HTMLElement {
       if (i < visibleValues.length) {
         inputs[0].value = visibleValues[i].start;
         inputs[1].value = visibleValues[i].end;
+        // 重要：更新_prevValue
+        inputs[0]._prevValue = visibleValues[i].start;
+        inputs[1]._prevValue = visibleValues[i].end;
         slot.classList.add("visible");
         delete slot.dataset.timeHidden;
       } else {
         inputs[0].value = "00:00";
         inputs[1].value = "00:00";
+        // 重要：更新_prevValue
+        inputs[0]._prevValue = "00:00";
+        inputs[1]._prevValue = "00:00";
         slot.classList.remove("visible");
         slot.dataset.timeHidden = "true";
       }
@@ -754,9 +810,11 @@ class HanchuessEnergyCard extends HTMLElement {
       if (slot.dataset.timeHidden === "true" || !slot.classList.contains("visible")) {
         slot.classList.add("visible");
         delete slot.dataset.timeHidden;
-        // Clear values for new slot
+        // Set default values for new slot (00:00)
         const inputs = slot.querySelectorAll("input[type='time']");
-        inputs.forEach(inp => { inp.value = ""; });
+        inputs.forEach(inp => { inp.value = "00:00"; });
+        // 重要：设置_prevValue，以便时间重叠检查能正常工作
+        inputs.forEach(inp => { inp._prevValue = "00:00"; });
         break;
       }
     }
