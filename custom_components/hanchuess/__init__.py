@@ -12,6 +12,8 @@ from .coordinator import HanchuessRealtimeCoordinator, HanchuessStatisticsCoordi
 
 _LOGGER = logging.getLogger(__name__)
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 SERVICE_DEVICE_CONTROL = "device_control"
 SERVICE_SCHEMA = vol.Schema({
     vol.Required("sn"): cv.string,

@@ -1,7 +1,5 @@
 {
   "name": "Hanchuess",
-  "description": "Home Assistant integration for Hanchu ESS",
   "render_readme": true,
-  "domains": ["sensor", "number", "switch"],
   "homeassistant": "2024.1.0"
 }

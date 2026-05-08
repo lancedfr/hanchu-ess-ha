@@ -1,8 +1,8 @@
 {
   "domain": "hanchuess",
   "name": "Hanchuess",
-  "description": "Home Assistant integration for Hanchu ESS",
   "documentation": "https://github.com/guoxiatech/hanchu-ess-ha",
+  "issue_tracker": "https://github.com/guoxiatech/hanchu-ess-ha/issues",
   "requirements": [],
   "dependencies": ["frontend", "http", "websocket_api"],
   "codeowners": ["@guoxiatech"],
