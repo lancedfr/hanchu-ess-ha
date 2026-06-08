@@ -55,7 +55,7 @@ class WorkModeSelect(SelectEntity):
             return
         result = await self._client.async_device_control(
             self._entry.data["sn"],
-            "inverter",
+            "2",
             {"WORK_MODE_CMB": value},
         )
         if result.get("success"):
