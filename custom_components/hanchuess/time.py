@@ -115,7 +115,7 @@ class HanchuessTimeSlot(TimeEntity):
         time_str = value.strftime("%H:%M")
         result = await self._client.async_device_control(
             self._entry.data["sn"],
-            "inverter",
+            "2",
             {self._config["control_key"]: time_str},
         )
         if result.get("success"):
