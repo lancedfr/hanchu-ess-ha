@@ -116,12 +116,12 @@ class HanchuessTimeSlot(TimeEntity):
         result = await self._client.async_device_control(
             self._entry.data["sn"],
             "2",
-            {self._config["control_key"]: time_str},
+            {self._config["control_key"]: seconds},
         )
         if result.get("success"):
             self._attr_native_value = value
             self.async_write_ha_state()
-            _LOGGER.info("%s set to %s", self._config["name"], time_str)
+            _LOGGER.info("%s set to %s seconds", self._config["name"], seconds)
         else:
             _LOGGER.error(
                 "Failed to set %s: %s", self._config["name"], result.get("msg")
