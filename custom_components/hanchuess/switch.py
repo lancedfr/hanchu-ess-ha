@@ -1,89 +1,116 @@
-"""Switch platform for Hanchuess."""
+"""Switch platform for Hanchuess - Fast charge and discharge controls."""
+import asyncio
 import logging
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-
-def _is_device_online(coordinator) -> bool:
-    dev_status = coordinator.data.get("devStatus")
-    try:
-        return int(dev_status) == 1
-    except (ValueError, TypeError):
-        return False
-
-SWITCHES = {
-    "inverter_switch": {
-        "key": "inverterOn",
-        "control_key": "INVERTER_SWITCH",
-        "icon": "mdi:power",
-    },
-}
+# act values from Hanchu API:
+# 1 = fast charge, -1 = fast discharge, 0 = stop
+FAST_CHARGE_DURATION = 60  # minutes
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    coordinators = hass.data[DOMAIN][entry.entry_id]
-    coordinator = coordinators["realtime"]
-    entities = []
-    for switch_key, config in SWITCHES.items():
-        if config["key"] in coordinator.data:
-            entities.append(HanchueSwitch(coordinator, entry, switch_key, config))
-    async_add_entities(entities)
+    data = hass.data[DOMAIN][entry.entry_id]
+    client = data["realtime"].client
+    async_add_entities([
+        FastChargeSwitch(client, entry),
+        FastDischargeSwitch(client, entry),
+    ])
 
 
-class HanchueSwitch(CoordinatorEntity, SwitchEntity):
+class FastChargeSwitch(SwitchEntity):
+    """Fast charge switch for Hanchuess."""
+
     _attr_has_entity_name = True
+    _attr_name = "Fast Charge"
+    _attr_icon = "mdi:battery-charging-high"
 
-    def __init__(self, coordinator, entry, switch_key, config):
-        super().__init__(coordinator)
+    def __init__(self, client, entry):
+        self._client = client
         self._entry = entry
-        self._config = config
-        self._attr_translation_key = switch_key
-        self._attr_unique_id = f"{entry.data['sn']}_{switch_key}"
-        self._attr_icon = config.get("icon")
+        self._attr_unique_id = f"{entry.data['sn']}_fast_charge"
+        self._attr_is_on = False
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.data["sn"])},
             name=f"Hanchuess {self._entry.data['sn']}",
-            manufacturer="Hanchuess",
+            manufacturer="Hanchu",
             model="ESS Device",
         )
 
-    @property
-    def available(self) -> bool:
-        return super().available and _is_device_online(self.coordinator)
-
-    @property
-    def is_on(self) -> bool | None:
-        value = self.coordinator.data.get(self._config["key"])
-        if value is None:
-            return None
-        return bool(value)
-
     async def async_turn_on(self, **kwargs) -> None:
-        result = await self.coordinator.client.async_device_control(
-            self._entry.data["sn"],
-            self._entry.data.get("dev_type", "2"),
-            {self._config["control_key"]: "1"},
+        result = await self._client.async_fast_charge_discharge(
+            self._entry.data["sn"], 1, FAST_CHARGE_DURATION
         )
         if result.get("success"):
-            await self.coordinator.async_request_refresh()
+            self._attr_is_on = True
+            self.async_write_ha_state()
+            _LOGGER.info("Fast charge started for %s", self._entry.data["sn"])
+        else:
+            _LOGGER.error("Fast charge failed: %s", result.get("msg"))
 
     async def async_turn_off(self, **kwargs) -> None:
-        result = await self.coordinator.client.async_device_control(
-            self._entry.data["sn"],
-            self._entry.data.get("dev_type", "2"),
-            {self._config["control_key"]: "0"},
+        result = await self._client.async_fast_charge_discharge(
+            self._entry.data["sn"], 0, 0
         )
         if result.get("success"):
-            await self.coordinator.async_request_refresh()
+            self._attr_is_on = False
+            self.async_write_ha_state()
+            _LOGGER.info("Fast charge stopped for %s", self._entry.data["sn"])
+        else:
+            _LOGGER.error("Fast charge stop failed: %s", result.get("msg"))
+
+
+class FastDischargeSwitch(SwitchEntity):
+    """Fast discharge switch for Hanchuess."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Fast Discharge"
+    _attr_icon = "mdi:battery-arrow-down"
+
+    def __init__(self, client, entry):
+        self._client = client
+        self._entry = entry
+        self._attr_unique_id = f"{entry.data['sn']}_fast_discharge"
+        self._attr_is_on = False
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.data["sn"])},
+            name=f"Hanchuess {self._entry.data['sn']}",
+            manufacturer="Hanchu",
+            model="ESS Device",
+        )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        result = await self._client.async_fast_charge_discharge(
+            self._entry.data["sn"], -1, FAST_CHARGE_DURATION
+        )
+        if result.get("success"):
+            self._attr_is_on = True
+            self.async_write_ha_state()
+            _LOGGER.info("Fast discharge started for %s", self._entry.data["sn"])
+        else:
+            _LOGGER.error("Fast discharge failed: %s", result.get("msg"))
+
+    async def async_turn_off(self, **kwargs) -> None:
+        result = await self._client.async_fast_charge_discharge(
+            self._entry.data["sn"], 0, 0
+        )
+        if result.get("success"):
+            self._attr_is_on = False
+            self.async_write_ha_state()
+            _LOGGER.info("Fast discharge stopped for %s", self._entry.data["sn"])
+        else:
+            _LOGGER.error("Fast discharge stop failed: %s", result.get("msg"))
