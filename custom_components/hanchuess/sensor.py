@@ -31,6 +31,7 @@ SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "icon": "mdi:battery-charging",
+        "scale": 1000,
     },
     "pv_power": {
         "key": "pvTtPwr",
@@ -38,6 +39,7 @@ SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "icon": "mdi:solar-power",
+        "scale": 1000,
     },
     "grid_power": {
         "key": "meterPPwr",
@@ -45,6 +47,7 @@ SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "icon": "mdi:transmission-tower",
+        "scale": 1000,
     },
     "load_power": {
         "key": "loadPwr",
@@ -52,6 +55,7 @@ SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "icon": "mdi:home-lightning-bolt",
+        "scale": 1000,
     },
     "dg_power": {
         "key": "dgPAcTotal",
@@ -59,6 +63,7 @@ SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "icon": "mdi:engine",
+        "scale": 1000,
         "condition_key": "hasDg",
         "condition_value": True,
     },
