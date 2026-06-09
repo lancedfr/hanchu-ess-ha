@@ -293,11 +293,11 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         if self._config.get("auto_watt"):
             try:
                 v = float(value)
-                # API returns watts below 1000, kW at 1000 and above
-                if abs(v) < 1000:
-                    return round(v, 1)
-                else:
+                # API returns watts below 10, kW at 10 and above
+                if abs(v) < 10:
                     return round(v * 1000, 1)
+                else:
+                    return round(v, 1)
             except (ValueError, TypeError):
                 return None
         if "scale" in self._config:
