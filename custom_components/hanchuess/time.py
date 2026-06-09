@@ -1,4 +1,4 @@
- """Time platform for Hanchuess - Charge and discharge time slot controls."""
+"""Time platform for Hanchuess - Charge and discharge time slot controls."""
 import asyncio
 import logging
 from datetime import time
