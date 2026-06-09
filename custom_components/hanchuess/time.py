@@ -76,14 +76,28 @@ TIME_SLOTS = {
     },
 }
 
+ALL_KEYS = [config["control_key"] for config in TIME_SLOTS.values()]
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
     data = hass.data[DOMAIN][entry.entry_id]
     client = data["realtime"].client
+
+    # Fetch all time slot values in one iotGet call
+    initial_values = {}
+    try:
+        result = await client.async_iot_get(
+            entry.data["sn"], "2", ALL_KEYS
+        )
+        initial_values = result or {}
+        _LOGGER.info("Initial time slot values: %s", initial_values)
+    except Exception as err:
+        _LOGGER.warning("Could not read initial time slot values: %s", err)
+
     entities = [
-        HanchuessTimeSlot(client, entry, slot_key, config)
+        HanchuessTimeSlot(client, entry, slot_key, config, initial_values)
         for slot_key, config in TIME_SLOTS.items()
     ]
     async_add_entities(entities)
@@ -94,16 +108,28 @@ class HanchuessTimeSlot(TimeEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, client, entry, slot_key, config):
+    def __init__(self, client, entry, slot_key, config, initial_values):
         self._client = client
         self._entry = entry
         self._config = config
         self._attr_name = config["name"]
         self._attr_unique_id = f"{entry.data['sn']}_{slot_key}"
         self._attr_icon = config["icon"]
-        self._attr_native_value = time(0, 0)
         self._debounce_task = None
         self._pending_value = None
+
+        # Set initial value from startup read
+        raw = initial_values.get(config["control_key"])
+        if raw is not None:
+            try:
+                total_seconds = int(float(raw))
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                self._attr_native_value = time(hours, minutes)
+            except (ValueError, TypeError):
+                self._attr_native_value = time(0, 0)
+        else:
+            self._attr_native_value = time(0, 0)
 
     @property
     def device_info(self) -> DeviceInfo:
