@@ -1,4 +1,5 @@
-"""Time platform for Hanchuess - Charge and discharge time slot controls."""
+ """Time platform for Hanchuess - Charge and discharge time slot controls."""
+import asyncio
 import logging
 from datetime import time
 from homeassistant.components.time import TimeEntity
@@ -9,6 +10,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+DEBOUNCE_SECONDS = 2
 
 TIME_SLOTS = {
     "charge_slot_1_start": {
@@ -99,6 +102,8 @@ class HanchuessTimeSlot(TimeEntity):
         self._attr_unique_id = f"{entry.data['sn']}_{slot_key}"
         self._attr_icon = config["icon"]
         self._attr_native_value = time(0, 0)
+        self._debounce_task = None
+        self._pending_value = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -110,19 +115,34 @@ class HanchuessTimeSlot(TimeEntity):
         )
 
     async def async_set_value(self, value: time) -> None:
-        """Send time slot change to device."""
-        # convert to seconds since midnight
-        seconds = (value.hour * 3600) + (value.minute * 60)
-        result = await self._client.async_device_control(
-            self._entry.data["sn"],
-            "2",
-            {self._config["control_key"]: seconds},
-        )
-        if result.get("success"):
-            self._attr_native_value = value
-            self.async_write_ha_state()
-            _LOGGER.info("%s set to %s seconds", self._config["name"], seconds)
-        else:
-            _LOGGER.error(
-                "Failed to set %s: %s", self._config["name"], result.get("msg")
+        """Debounce time slot changes to avoid multiple API calls."""
+        self._pending_value = value
+        self._attr_native_value = value
+        self.async_write_ha_state()
+
+        if self._debounce_task:
+            self._debounce_task.cancel()
+
+        self._debounce_task = asyncio.ensure_future(self._send_after_delay())
+
+    async def _send_after_delay(self) -> None:
+        """Wait for debounce period then send to API."""
+        try:
+            await asyncio.sleep(DEBOUNCE_SECONDS)
+            value = self._pending_value
+            if value is None:
+                return
+            seconds = (value.hour * 3600) + (value.minute * 60)
+            result = await self._client.async_device_control(
+                self._entry.data["sn"],
+                "2",
+                {self._config["control_key"]: seconds},
             )
+            if result.get("success"):
+                _LOGGER.info("%s set to %s seconds", self._config["name"], seconds)
+            else:
+                _LOGGER.error(
+                    "Failed to set %s: %s", self._config["name"], result.get("msg")
+                )
+        except asyncio.CancelledError:
+            pass
