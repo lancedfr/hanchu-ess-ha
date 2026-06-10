@@ -71,7 +71,7 @@ SENSORS = {
         "key": "bmsDesignCap",
         "device_class": SensorDeviceClass.BATTERY,
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfEnergy.WATT_HOUR,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "icon": "mdi:battery",
     },
 }
