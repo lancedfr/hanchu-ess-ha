@@ -1,66 +1,195 @@
 # Hanchuess Home Assistant Integration
 
-A custom Home Assistant integration for monitoring and controlling Hanchuess ESS (Energy Storage System) devices.
+A Home Assistant integration for the Hanchu iESS battery storage system, providing full local control and automation support via the Hanchu cloud gateway API.
+
+This fork extends the original [guoxiatech/hanchu-ess-ha](https://github.com/guoxiatech/hanchu-ess-ha) integration with proper automatable entities, correct API mappings, and Predbat compatibility.
 
 ## Features
 
-- **Real-time Monitoring** — Battery SOC, PV power, grid power, load power, battery power, generator power (if available)
-- **Daily Energy Statistics** — PV generation, battery charge/discharge, grid import/export, load consumption, generator energy (if available)
-- **Remote Settings Card** — Custom Lovelace card for configuring work modes, charge/discharge time periods, and related parameters
-- **Fast Charge/Discharge** — Quick charge or discharge with configurable duration and one-click stop
-- **Multi-device Support** — Manage multiple devices under one account
-- **Internationalization** — English and Simplified Chinese UI
+### Sensors
+- Battery SOC (%)
+- Battery Power (W) — with automatic kW/W scaling
+- Battery Capacity (kWh)
+- Grid Power (W) — signed (positive = import, negative = export)
+- Load Power (W)
+- PV Power (W)
+- Daily Charge/Discharge Energy (kWh)
+- Daily Grid Import/Export (kWh)
+- Daily Load/PV Energy (kWh)
+- Device Status (online/offline/pending)
+
+### Controls (fully automatable)
+- **Work Mode** — Self-consumption, Backup Energy, User-defined, Off-grid
+- **Charge Power Limit** (0–5000W)
+- **Discharge Power Limit** (0–5000W)
+- **Maximum Charge SOC** (50–100%)
+- **Minimum Discharge SOC** (5–45%)
+- **Grid to Battery Charge Maximum** (20–100%)
+- **Charge Time Slots 1–3** — Start and End times
+- **Discharge Time Slots 1–3** — Start and End times
+- **Fast Charge** switch
+- **Fast Discharge** switch
+
+### Key improvements over original integration
+- All control entities are proper HA entities — fully automatable, voice controllable via Alexa/Google
+- Correct `iotSet` API keys mapped from live device menu response
+- Startup state reading — entities populate with current device values on HA restart
+- Debounced time slot entities — prevents multiple API calls when adjusting times
+- Automatic kW/W scaling for power sensors (Hanchu API returns mixed units)
+- Work mode reads current state on startup
+- Fast Charge/Discharge as proper switch entities
+
+## Requirements
+
+- Home Assistant 2024.1 or later
+- HACS installed
+- Hanchu iESS battery system with cloud connectivity
+- Hanchu app account (email and password)
 
 ## Installation
 
-### Via HACS (Recommended)
+### Via HACS (recommended)
 
-1. Make sure [HACS](https://hacs.xyz/) is installed
-2. Go to HACS → Integrations
-3. Click the top-right menu → Custom repositories
-4. Add this repository URL, category: Integration
-5. Search for "Hanchuess" and install
-6. Restart Home Assistant
+1. Open HACS in Home Assistant
+2. Click the three dots menu → **Custom repositories**
+3. Add `https://github.com/upton68/hanchu-ess-ha` as an **Integration**
+4. Search for **Hanchuess** in HACS and click **Download**
+5. Restart Home Assistant
+6. Go to **Settings → Devices & Services → Add Integration**
+7. Search for **Hanchuess** and follow the setup flow
 
-### Manual Installation
+### Manual installation
 
-1. Download this repository
-2. Copy the folder to `config/custom_components/hanchuess/`
-3. Restart Home Assistant
+1. Copy the `custom_components/hanchuess` folder to your HA `config/custom_components/` directory
+2. Restart Home Assistant
+3. Add the integration via **Settings → Devices & Services**
 
 ## Configuration
 
-1. Go to **Settings → Devices & Services → Add Integration**
-2. Search for **Hanchuess**
-3. Enter your Hanchuess account credentials
-4. Select the devices you want to add
-5. Done
+During setup you will need:
+- Your Hanchu app email address
+- Your Hanchu app password
+- Your device serial number (found in the Hanchu app)
 
-## Entities
+## Predbat Integration
 
-### Sensors (Real-time, updated every 60s)
+This integration is compatible with [Predbat](https://github.com/springfall2008/batpow) for intelligent battery scheduling.
 
-| Entity | Description |
-|---|---|
-| Device Status | Online / Offline / Pending |
-| Battery SOC | Battery state of charge (%) |
-| Battery Power | Battery charge/discharge power (W) |
-| PV Power | Solar photovoltaic power (W) |
-| Grid Power | Grid import/export power (W) |
-| Load Power | Home load power (W) |
-| Generator Power | Diesel generator power (W) — only if device has generator |
+### Recommended apps.yaml mappings
 
-### Sensors (Statistics, updated every 5min)
+```yaml
+inverter_type: "HC"
+inverter:
+  has_service_api: true
+  output_charge_control: "power"
+  charge_time_format: "S"
 
-| Entity | Description |
-|---|---|
-| Daily Load Energy | Today's load consumption (kWh) |
-| Daily PV Energy | Today's PV generation (kWh) |
-| Daily Charge Energy | Today's battery charge (kWh) |
-| Daily Discharge Energy | Today's battery discharge (kWh) |
-| Daily Grid Import | Today's grid import (kWh) |
-| Daily Grid Export | Today's grid export (kWh) |
-| Daily Generator Energy | Today's generator output (kWh) — only if device has generator |
+battery_power:
+  - sensor.hanchuess_YOURSERIAL_battery_power
+grid_power:
+  - sensor.hanchuess_YOURSERIAL_grid_power
+soc_percent:
+  - sensor.hanchuess_YOURSERIAL_battery_soc
+battery_min_soc:
+  - number.hanchuess_YOURSERIAL_minimum_discharge_soc
+charge_rate:
+  - number.hanchuess_YOURSERIAL_charge_power_limit
+discharge_rate:
+  - number.hanchuess_YOURSERIAL_discharge_power_limit
+
+charge_start_service:
+  - service: input_boolean.turn_on
+    entity_id: input_boolean.predbat_charge_start
+charge_stop_service:
+  - service: input_boolean.turn_off
+    entity_id: input_boolean.predbat_charge_start
+discharge_start_service:
+  - service: input_boolean.turn_on
+    entity_id: input_boolean.predbat_discharge_start
+discharge_stop_service:
+  - service: input_boolean.turn_off
+    entity_id: input_boolean.predbat_discharge_start
+
+Predbat bridge automations
+Predbat controls charge/discharge by setting time slots. Add these automations to wire Predbat to the integration:
+
+alias: Predbat Bridge - Start Charge
+triggers:
+  - entity_id: input_boolean.predbat_charge_start
+    to: "on"
+    trigger: state
+actions:
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
+    data:
+      time: "{{ now().strftime('%H:%M:%S') }}"
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
+    data:
+      time: "11:00:00"
+
+alias: Predbat Bridge - Stop Charge
+triggers:
+  - entity_id: input_boolean.predbat_charge_start
+    to: "off"
+    trigger: state
+actions:
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
+    data:
+      time: "00:00:00"
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
+    data:
+      time: "00:00:00"
+
+alias: Predbat Bridge - Start Discharge
+triggers:
+  - entity_id: input_boolean.predbat_discharge_start
+    to: "on"
+    trigger: state
+actions:
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
+    data:
+      time: "{{ now().strftime('%H:%M:%S') }}"
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
+    data:
+      time: "23:59:00"
+
+alias: Predbat Bridge - Stop Discharge
+triggers:
+  - entity_id: input_boolean.predbat_discharge_start
+    to: "off"
+    trigger: state
+actions:
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
+    data:
+      time: "00:00:00"
+  - action: time.set_value
+    target:
+      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
+    data:
+      time: "00:00:00"
+
+Replace YOURSERIAL with your device serial number throughout.
+Known Limitations
+Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
+The Hanchu API returns mixed units for power sensors (watts below 1kW, kilowatts above) — the integration handles this automatically
+Token refresh is handled automatically every 25 days
+Credits
+Based on the original work by guoxiatech.
+API reverse engineering and extended entity support by upton68.
+
 
 ## Token Expiration & Re-authentication
 
