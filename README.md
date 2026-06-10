@@ -109,10 +109,12 @@ discharge_start_service:
 discharge_stop_service:
   - service: input_boolean.turn_off
     entity_id: input_boolean.predbat_discharge_start
+```
 
 Predbat bridge automations
 Predbat controls charge/discharge by setting time slots. Add these automations to wire Predbat to the integration:
 
+```
 alias: Predbat Bridge - Start Charge
 triggers:
   - entity_id: input_boolean.predbat_charge_start
@@ -180,7 +182,7 @@ actions:
       entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
     data:
       time: "00:00:00"
-
+```
 Replace YOURSERIAL with your device serial number throughout.
 Known Limitations
 Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
@@ -189,38 +191,3 @@ Token refresh is handled automatically every 25 days
 Credits
 Based on the original work by guoxiatech.
 API reverse engineering and extended entity support by upton68.
-
-
-## Token Expiration & Re-authentication
-
-The Hanchuess cloud token has a limited validity period. When the token expires, the integration will automatically attempt to refresh it. If the refresh fails, all device entities will become **Unavailable**:
-
-![Entities Unavailable](docs/reauth-unavailable.png)
-
-When this happens, go to **Settings** — you will see a repair notification at the top of the page:
-
-![Repair Notification](docs/reauth-repair.png)
-
-Click the repair item, then re-enter your Hanchuess account and password in the dialog and click **Submit**:
-
-![Re-authenticate](docs/reauth-login.png)
-
-After successful authentication, all devices will automatically recover and start reporting data again. If you have multiple devices, you only need to authenticate once — all devices share the same token.
-
-## Custom Lovelace Card
-
-The integration auto-registers a custom card **Hanchuess Remote Settings** which can be found under **Custom cards** when adding a card to your dashboard.
-
-![Custom Card](docs/card-picker.png)
-
-The card provides:
-
-- **SN display** at the top
-- **Fast Charge/Discharge** — Select mode (charge/discharge), set duration, confirm or stop with real-time countdown
-- **Energy Settings** — Load and configure work mode, charge/discharge time periods, SOC limits, and other parameters from the device menu
-
-> **Note:** If you cannot find the Hanchuess card when adding to dashboard, please clear your browser cache and refresh the page, or restart Home Assistant.
-
-## License
-
-MIT License
