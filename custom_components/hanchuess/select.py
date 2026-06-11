@@ -24,7 +24,8 @@ async def async_setup_entry(
 ):
     data = hass.data[DOMAIN][entry.entry_id]
     client = data["realtime"].client
-    async_add_entities([WorkModeSelect(client, entry)])
+    startup_values = data.get("startup_values", {})
+    async_add_entities([WorkModeSelect(client, entry, startup_values)])
 
 
 class WorkModeSelect(SelectEntity):
@@ -35,11 +36,18 @@ class WorkModeSelect(SelectEntity):
     _attr_icon = "mdi:dip-switch"
     _attr_options = list(WORK_MODES.keys())
 
-    def __init__(self, client, entry):
+    def __init__(self, client, entry, startup_values):
         self._client = client
         self._entry = entry
         self._attr_unique_id = f"{entry.data['sn']}_work_mode"
         self._attr_current_option = None
+
+        # Set initial value from startup read
+        value = startup_values.get("WORK_MODE_CMB")
+        if value is not None:
+            mode = WORK_MODES_REVERSE.get(str(value).strip())
+            if mode:
+                self._attr_current_option = mode
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -49,24 +57,6 @@ class WorkModeSelect(SelectEntity):
             manufacturer="Hanchu",
             model="ESS Device",
         )
-
-    async def async_added_to_hass(self) -> None:
-        """Read current work mode from device on startup."""
-        try:
-            result = await self._client.async_iot_get(
-                self._entry.data["sn"],
-                "2",
-                ["WORK_MODE_CMB"],
-            )
-            value = result.get("WORK_MODE_CMB")
-            if value is not None:
-                mode = WORK_MODES_REVERSE.get(str(value).strip())
-                if mode:
-                    self._attr_current_option = mode
-                    self.async_write_ha_state()
-                    _LOGGER.info("Work mode initialised to %s", mode)
-        except Exception as err:
-            _LOGGER.warning("Could not read initial work mode: %s", err)
 
     async def async_select_option(self, option: str) -> None:
         """Send work mode change to device."""
