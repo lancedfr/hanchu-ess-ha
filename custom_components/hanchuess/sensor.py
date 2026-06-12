@@ -35,6 +35,7 @@ SENSORS = {
     },
     "fast_charge_time_remaining": {
         "key": "testTimeRemain",
+        "name": "Fast Charge Time Remaining",
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": "min",
         "icon": "mdi:timer-outline",
@@ -75,6 +76,7 @@ SENSORS = {
     },
     "battery_capacity": {
         "key": "bmsDesignCap",
+        "name": "Battery Capacity",
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "icon": "mdi:battery",
@@ -279,7 +281,6 @@ async def async_setup_entry(
 
 
 class HanchueSensor(CoordinatorEntity, SensorEntity):
-  pass
 
     def __init__(self, coordinator, entry, sensor_key, config):
         super().__init__(coordinator)
@@ -318,7 +319,6 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         if self._config.get("auto_watt"):
             try:
                 v = float(value)
-                # API returns watts below 10, kW at 10 and above
                 if abs(v) < 10:
                     return round(v * 1000, 1)
                 else:
