@@ -37,7 +37,7 @@ SENSORS = {
         "key": "testTimeRemain",
         "name": "Fast Charge Time Remaining",
         "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "min",
+        "unit": "s",
         "icon": "mdi:timer-outline",
     },
     "pv_power": {
