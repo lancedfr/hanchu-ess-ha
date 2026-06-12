@@ -286,9 +286,12 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         self._entry = entry
         self._sensor_key = sensor_key
         self._config = config
-        self._attr_translation_key = sensor_key
         self._attr_unique_id = f"{entry.data['sn']}_{sensor_key}"
         self._attr_icon = config.get("icon")
+        if "name" in config:
+            self._attr_name = config["name"]
+        else:
+            self._attr_translation_key = sensor_key
         if "device_class" in config:
             self._attr_device_class = config["device_class"]
         if "state_class" in config:
