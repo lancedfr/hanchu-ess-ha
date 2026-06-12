@@ -11,8 +11,8 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 # act values from Hanchu API:
-# 1 = fast charge, -1 = fast discharge, 0 = stop
-FAST_CHARGE_DURATION = 60  # minutes
+# 2, -2 = fast charge, 3, -3 = fast discharge, 0 = stop
+FAST_CHARGE_DURATION = 3600  # seconds
 
 
 async def async_setup_entry(
