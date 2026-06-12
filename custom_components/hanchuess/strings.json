@@ -50,7 +50,7 @@
       "daily_discharge_energy": { "name": "Daily Discharge Energy" },
       "daily_grid_import": { "name": "Daily Grid Import" },
       "daily_grid_export": { "name": "Daily Grid Export" },
-      "daily_dg_energy": { "name": "Daily Generator Energy" }
+      "daily_dg_energy": { "name": "Daily Generator Energy" },
       "fast_charge_time_remaining": { "name": "Fast Charge Time Remaining" }
     },
     "number": {
