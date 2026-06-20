@@ -20,8 +20,8 @@ This fork extends the original [guoxiatech/hanchu-ess-ha](https://github.com/guo
 
 ### Controls (fully automatable)
 - **Work Mode** — Self-consumption, Backup Energy, User-defined, Off-grid
-- **Charge Power Limit** 
-- **Discharge Power Limit** 
+- **Charge Power Limit**
+- **Discharge Power Limit**
 - **Maximum Charge SOC** (50–100%)
 - **Minimum Discharge SOC** (5–45%)
 - **Grid to Battery Charge Maximum** (20–100%)
@@ -30,6 +30,38 @@ This fork extends the original [guoxiatech/hanchu-ess-ha](https://github.com/guo
 - **Fast Charge** switch
 - **Fast Discharge** switch
 
+## Services
+
+In addition to the automatable entities above, this integration exposes two HA services for advanced use.
+
+### `hanchuess.fast_charge`
+
+Trigger fast charge or discharge for a set duration directly from an automation — useful for scenarios like boost-charging when import prices go negative, without needing to use the Fast Charge/Discharge switches and a separate duration helper.
+
+| Field | Required | Description |
+|---|---|---|
+| `sn` | No | Inverter serial number. Defaults to your only configured inverter if omitted. |
+| `act` | Yes | Action code: `2` = start fast charge, `-2` = stop fast charge, `3` = start fast discharge, `-3` = stop fast discharge. |
+| `duration` | No | Duration in seconds. Required when starting (`act` 2 or 3). |
+
+Example automation action:
+```yaml
+action: hanchuess.fast_charge
+data:
+  act: 2
+  duration: 1800
+```
+
+### `hanchuess.device_control`
+
+Low-level service for sending arbitrary key/value control signals directly to the device — used internally by the integration's entities, but available for advanced or custom automations.
+
+| Field | Required | Description |
+|---|---|---|
+| `sn` | Yes | Inverter serial number. |
+| `dev_type` | Yes | Device type (e.g. `2` for inverter). |
+| `value` | Yes | Key-value pairs of control signals to send. |
+
 ### Key improvements over original integration
 - All control entities are proper HA entities — fully automatable, voice controllable via Alexa/Google
 - Correct `iotSet` API keys mapped from live device menu response
@@ -37,7 +69,7 @@ This fork extends the original [guoxiatech/hanchu-ess-ha](https://github.com/guo
 - Debounced time slot entities — prevents multiple API calls when adjusting times
 - Automatic kW/W scaling for power sensors (Hanchu API returns mixed units)
 - Work mode reads current state on startup
-- Fast Charge/Discharge as proper switch entities
+- Fast Charge/Discharge as proper switch entities, plus an automatable `fast_charge` service
 
 ## Requirements
 
@@ -114,7 +146,7 @@ discharge_stop_service:
 ## Predbat bridge automations
 Predbat controls charge/discharge by setting time slots. Add these automations to wire Predbat to the integration:
 
-```
+```yaml
 alias: Predbat Bridge - Start Charge
 triggers:
   - entity_id: input_boolean.predbat_charge_start
@@ -187,9 +219,10 @@ Replace YOURSERIAL with your device serial number throughout.
 
 ## Known Limitations
 
-Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
-The Hanchu API returns mixed units for power sensors (watts below 1kW, kilowatts above) — the integration handles this automatically
-Token refresh is handled automatically every 25 days
+- Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
+- The Hanchu API returns mixed units for power sensors (watts below 1kW, kilowatts above) — the integration handles this automatically
+- Token refresh is handled automatically every 25 days
+
 ## Credits
 Based on the original work by guoxiatech.
 API reverse engineering and extended entity support by upton68.
@@ -201,9 +234,10 @@ The integration auto-registers a custom card Hanchuess Remote Settings which can
 
 The card provides:
 
-SN display at the top
-Fast Charge/Discharge — Select mode (charge/discharge), set duration, confirm or stop with real-time countdown
-Energy Settings — Load and configure work mode, charge/discharge time periods, SOC limits, and other parameters from the device menu
+- SN display at the top
+- Fast Charge/Discharge — Select mode (charge/discharge), set duration, confirm or stop with real-time countdown
+- Energy Settings — Load and configure work mode, charge/discharge time periods, SOC limits, and other parameters from the device menu
+
 Note: If you cannot find the Hanchuess card when adding to dashboard, please clear your browser cache and refresh the page, or restart Home Assistant.
 
 ## License
