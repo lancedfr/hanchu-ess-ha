@@ -217,6 +217,79 @@ actions:
 ```
 Replace YOURSERIAL with your device serial number throughout.
 
+## Development
+
+### Running tests
+
+The test suite is split into two tiers so it can run on both Windows (where the
+integration is developed) and Linux (CI):
+
+- **Offline tests** — `tests/test_api_mocked.py` (API client, mocked with
+  `aioresponses`) and `tests/test_logic.py` (sensor scaling, menu parsing, time
+  encode/decode). No credentials or Home Assistant runtime required. Run on any
+  platform.
+- **Config-flow tests** — `tests/test_config_flow.py` use the Home Assistant test
+  harness (`pytest-homeassistant-custom-component`). This pulls in HA core, which
+  imports Unix-only modules and **cannot run on Windows** — these tests skip
+  automatically there and run on Linux/CI.
+- **Live integration test** — `tests/test_api_integration.py` hits the real
+  Hanchu cloud API and is opt-in: it skips unless `HANCHUESS_ACCOUNT` and
+  `HANCHUESS_PASSWORD` are set.
+
+#### Windows (local development)
+
+Install the cross-platform dependencies and run pytest. The config-flow tests
+skip cleanly; the offline tests execute.
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-test.txt
+pytest
+```
+
+> Do **not** install `pytest-homeassistant-custom-component` on Windows (directly,
+> or via `requirements-test-ha.txt`). It brings in HA core, whose pytest plugin
+> imports `fcntl` (Unix-only) at startup and breaks the **entire** local pytest
+> session — every test, not just the config-flow ones, fails to collect with
+> `ModuleNotFoundError: No module named 'fcntl'`.
+>
+> If it does end up installed in your Windows environment, recover with either:
+>
+> ```powershell
+> pip uninstall pytest-homeassistant-custom-component   # restores a clean setup
+> # ...or block its plugin for a single run without uninstalling:
+> pytest -p no:homeassistant
+> ```
+
+#### Linux / CI (full suite)
+
+`requirements-test-ha.txt` adds the HA test harness on top of the cross-platform
+deps, so every test — including the config-flow tests — runs.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-test-ha.txt
+pytest
+```
+
+This is exactly what the GitHub Actions **Tests** workflow
+(`.github/workflows/tests.yml`) runs on every push and pull request.
+
+#### Running the live integration test
+
+```bash
+export HANCHUESS_ACCOUNT="you@example.com"
+export HANCHUESS_PASSWORD="your-password"
+export HANCHUESS_SN="YOURSERIAL"          # optional, enables device-specific reads
+# export HANCHUESS_ALLOW_WRITE=1          # optional, enables no-op write-path tests
+pytest tests/test_api_integration.py
+```
+
+On Windows PowerShell, set these with `$env:HANCHUESS_ACCOUNT = "..."` instead of
+`export`.
+
 **Known Limitations**
 
 - The Hanchu API returns mixed units for power sensors (watts below 1kW, kilowatts above). The integration includes a heuristic to handle most cases automatically, however readings in the 1–9W range may occasionally be misreported. A full fix using the explicit unit fields returned by the API is currently in progress.
