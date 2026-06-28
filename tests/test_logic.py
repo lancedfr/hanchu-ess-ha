@@ -11,17 +11,24 @@ import pytest
 pytest.importorskip("homeassistant")
 
 from custom_components.hanchuess import time as time_mod
+from custom_components.hanchuess.const import DEFAULT_FAST_CHARGE_DURATION
 from custom_components.hanchuess.sensor import (
     SENSORS,
     HanchueSensor,
     _parse_energy_menu,
 )
+from custom_components.hanchuess.switch import _fast_charge_duration
 from custom_components.hanchuess.time import TIME_SLOTS, HanchuessTimeSlot
 
 
 class _FakeEntry:
     def __init__(self, sn="SN1"):
         self.data = {"sn": sn}
+
+
+class _FakeOptionsEntry:
+    def __init__(self, options=None):
+        self.options = options or {}
 
 
 def _make_sensor(config, value, unit=None):
@@ -39,7 +46,7 @@ def _make_sensor(config, value, unit=None):
 
 
 # ---------------------------------------------------------------------------
-# auto_watt scaling (see plans/P0-06-auto-watt-scaling.md)
+# auto_watt scaling
 #
 # Scaling now trusts the API's per-field `<field>Unit` sibling. The magnitude
 # heuristic below is only the fallback for readings that arrive without a unit.
@@ -130,7 +137,33 @@ def test_scale_factor_applied():
 
 
 # ---------------------------------------------------------------------------
-# _parse_energy_menu (see plans/P0-07-parse-energy-menu-indexerror.md)
+# Fast-charge duration option
+#
+# The option is stored in minutes; the switch passes seconds to the API.
+# ---------------------------------------------------------------------------
+
+def test_fast_charge_duration_defaults_to_30_minutes():
+    # No option set -> default 30 minutes -> 1800 seconds.
+    assert _fast_charge_duration(_FakeOptionsEntry()) == DEFAULT_FAST_CHARGE_DURATION * 60
+    assert _fast_charge_duration(_FakeOptionsEntry()) == 1800
+
+
+def test_fast_charge_duration_converts_minutes_to_seconds():
+    assert _fast_charge_duration(_FakeOptionsEntry({"fast_charge_duration": 45})) == 2700
+
+
+def test_fast_charge_duration_min_bound():
+    # 5 minutes (configured minimum) -> 300 seconds.
+    assert _fast_charge_duration(_FakeOptionsEntry({"fast_charge_duration": 5})) == 300
+
+
+def test_fast_charge_duration_max_bound():
+    # 240 minutes (configured maximum, 4 h) -> 14400 seconds.
+    assert _fast_charge_duration(_FakeOptionsEntry({"fast_charge_duration": 240})) == 14400
+
+
+# ---------------------------------------------------------------------------
+# _parse_energy_menu
 # ---------------------------------------------------------------------------
 
 def test_parse_energy_menu_empty_returns_defaults():

@@ -4,7 +4,18 @@ import time
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant import config_entries
-from .const import DOMAIN, BASE_URL
+from homeassistant.config_entries import OptionsFlowWithReload
+from homeassistant.core import callback
+from .const import (
+    DOMAIN,
+    BASE_URL,
+    CONF_REALTIME_INTERVAL,
+    CONF_STATISTICS_INTERVAL,
+    CONF_FAST_CHARGE_DURATION,
+    DEFAULT_REALTIME_INTERVAL,
+    DEFAULT_STATISTICS_INTERVAL,
+    DEFAULT_FAST_CHARGE_DURATION,
+)
 from .api import HanchuessApiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -16,6 +27,11 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self):
         self._token = None
         self._devices = []
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return HanchuessOptionsFlow()
 
     async def async_step_user(self, user_input=None):
         """Step 1: Login."""
@@ -169,3 +185,29 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             errors=errors,
         )
+
+
+class HanchuessOptionsFlow(OptionsFlowWithReload):
+    """Options flow: poll intervals and fast-charge duration."""
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        options = self.config_entry.options
+        data_schema = vol.Schema({
+            vol.Required(
+                CONF_REALTIME_INTERVAL,
+                default=options.get(CONF_REALTIME_INTERVAL, DEFAULT_REALTIME_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=30, max=3600)),
+            vol.Required(
+                CONF_STATISTICS_INTERVAL,
+                default=options.get(CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
+            vol.Required(
+                CONF_FAST_CHARGE_DURATION,
+                default=options.get(CONF_FAST_CHARGE_DURATION, DEFAULT_FAST_CHARGE_DURATION),
+            ): vol.All(vol.Coerce(int), vol.Range(min=5, max=240)),
+        })
+
+        return self.async_show_form(step_id="init", data_schema=data_schema)
