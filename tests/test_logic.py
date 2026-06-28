@@ -142,8 +142,8 @@ def test_scale_factor_applied():
 # The option is stored in minutes; the switch passes seconds to the API.
 # ---------------------------------------------------------------------------
 
-def test_fast_charge_duration_defaults_to_30_minutes():
-    # No option set -> default 30 minutes -> 1800 seconds.
+def test_fast_charge_duration_defaults_to_60_minutes():
+    # No option set -> default 60 minutes -> 3600 seconds.
     assert _fast_charge_duration(_FakeOptionsEntry()) == DEFAULT_FAST_CHARGE_DURATION * 60
     assert _fast_charge_duration(_FakeOptionsEntry()) == 3600
 
