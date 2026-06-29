@@ -172,9 +172,17 @@ The integration follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR
 
 Releases are **automated**. Pushing a `vX.Y.Z` tag triggers the **Release**
 workflow (`.github/workflows/release.yml`), which extracts the matching section
-from `CHANGELOG.md`, builds a zip of the integration, and publishes a GitHub
-Release. HACS then offers the new tag to users. Maintainers (codeowners) perform
-releases; the steps below document the full process.
+from `CHANGELOG.md`, builds a zip of the integration (`hanchuess.zip`), and
+publishes a GitHub Release with that zip attached. HACS then offers the new tag
+to users. Maintainers (codeowners) perform releases; the steps below document the
+full process.
+
+`hacs.json` sets `"zip_release": true` and `"filename": "hanchuess.zip"`, so HACS
+installs the integration **from this attached zip**, not from the tagged source
+tree. The zip is therefore load-bearing: if the Release workflow fails to build
+or attach `hanchuess.zip`, HACS cannot install that version even though the tag
+exists. The `filename` in `hacs.json` must stay in sync with the asset name the
+workflow uploads (`files: hanchuess.zip`).
 
 ### Before you start
 
@@ -240,9 +248,10 @@ git push origin v1.2.7
 - Watch the **Release** workflow run under the repo's **Actions** tab; it should
   finish green.
 - Check the **Releases** page: a `Hanchu ESS X.Y.Z` release should exist, with
-  the changelog section as its notes and the integration zip attached.
+  the changelog section as its notes and a `hanchuess.zip` asset attached. HACS
+  installs from this asset, so confirm it is present and non-empty.
 - In a Home Assistant instance with HACS, the integration should offer the new
-  version as an available update.
+  version as an available update and install it from the attached zip.
 
 If the workflow fails, the most common causes are a `CHANGELOG.md` heading that
 doesn't match the tag (step 3) or a manifest/tag version mismatch (steps 2 and 5).

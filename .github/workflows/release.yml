@@ -33,8 +33,8 @@ jobs:
 
       - name: Build release zip
         run: |
-          cd custom_components/hanchu_ess
-          zip -r ../../hanchu_ess.zip . --exclude "**/__pycache__/*" --exclude "**/*.pyc"
+          cd custom_components/hanchuess
+          zip -r ../../hanchuess.zip . --exclude "**/__pycache__/*" --exclude "**/*.pyc"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -42,6 +42,6 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: "Hanchu ESS ${{ steps.changelog.outputs.version }}"
           body_path: /tmp/release_notes.md
-          files: hanchu_ess.zip
+          files: hanchuess.zip
           draft: false
           prerelease: false
