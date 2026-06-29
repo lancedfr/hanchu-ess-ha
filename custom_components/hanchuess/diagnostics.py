@@ -10,7 +10,7 @@ from homeassistant.helpers.device_registry import DeviceEntry
 
 from .const import DOMAIN
 
-TO_REDACT = {"token", "account", "password", "sn", "stationId", "username", "pwd"}
+TO_REDACT = {"token", "account", "password", "sn", "stationId", "username", "pwd", "unique_id", "title"}
 
 
 async def async_get_config_entry_diagnostics(
