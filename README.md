@@ -8,7 +8,7 @@ This fork extends the original [guoxiatech/hanchu-ess-ha](https://github.com/guo
 
 ### Sensors
 - Battery SOC (%)
-- Battery Power (W) — with automatic kW/W scaling
+- Battery Power (W) — signed (positive = charge, negative = discharge)
 - Battery Capacity (kWh)
 - Grid Power (W) — signed (positive = import, negative = export)
 - Load Power (W)
@@ -67,7 +67,7 @@ Low-level service for sending arbitrary key/value control signals directly to th
 - Correct `iotSet` API keys mapped from live device menu response
 - Startup state reading — entities populate with current device values on HA restart
 - Debounced time slot entities — prevents multiple API calls when adjusting times
-- Automatic kW/W scaling for power sensors (Hanchu API returns mixed units)
+- Power sensors normalised to watts using the Hanchu API's explicit per-field unit (the API returns mixed W/kW units)
 - Work mode reads current state on startup
 - Fast Charge/Discharge as proper switch entities, plus an automatable `fast_charge` service
 
@@ -290,12 +290,9 @@ pytest tests/test_api_integration.py
 On Windows PowerShell, set these with `$env:HANCHUESS_ACCOUNT = "..."` instead of
 `export`.
 
-**Known Limitations**
-
-- The Hanchu API returns mixed units for power sensors (watts below 1kW, kilowatts above). The integration includes a heuristic to handle most cases automatically, however readings in the 1–9W range may occasionally be misreported. A full fix using the explicit unit fields returned by the API is currently in progress.
+## Known Limitations
 
 - Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
-
 - Token refresh is handled automatically every 25 days
 
 ## Credits

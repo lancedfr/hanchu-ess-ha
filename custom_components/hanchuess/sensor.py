@@ -32,6 +32,7 @@ SENSORS = {
         "unit": UnitOfPower.WATT,
         "icon": "mdi:battery-charging",
         "auto_watt": True,
+        "unit_key": "batPUnit",
     },
     "fast_charge_time_remaining": {
         "key": "testTimeRemain",
@@ -47,6 +48,7 @@ SENSORS = {
         "unit": UnitOfPower.WATT,
         "icon": "mdi:solar-power",
         "auto_watt": True,
+        "unit_key": "pvTtPwrUnit",
     },
     "grid_power": {
         "key": "meterPPwr",
@@ -55,6 +57,7 @@ SENSORS = {
         "unit": UnitOfPower.WATT,
         "icon": "mdi:transmission-tower",
         "auto_watt": True,
+        "unit_key": "meterPPwrUnit",
     },
     "load_power": {
         "key": "loadPwr",
@@ -62,7 +65,6 @@ SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfPower.WATT,
         "icon": "mdi:home-lightning-bolt",
-        "auto_watt": True,
     },
     "dg_power": {
         "key": "dgPAcTotal",
@@ -71,6 +73,7 @@ SENSORS = {
         "unit": UnitOfPower.WATT,
         "icon": "mdi:engine",
         "auto_watt": True,
+        "unit_key": "dgPAcTotalUnit",
         "condition_key": "hasDg",
         "condition_value": True,
     },
@@ -88,6 +91,7 @@ SENSORS = {
         "unit": UnitOfPower.WATT,
         "icon": "mdi:solar-power",
         "auto_watt": True,
+        "unit_key": "bypMeterTotalPowerUnit",
     },
 }
 
@@ -150,6 +154,30 @@ STATUS_MAP = {
     1: "online",
     99: "pending",
 }
+
+
+def _scale_auto_watt(value, unit=None):
+    """Normalise a power reading to watts.
+
+    getDeviceStatus reports each power field in W or kW and, for most fields,
+    carries a sibling ``<field>Unit`` string. When a unit is present we trust it
+    (kW -> *1000, W -> unchanged). When it is absent or unrecognised we fall back
+    to the legacy magnitude heuristic (|value| < 10 assumed to be kW). The
+    fallback only matters for fields the API doesn't tag.
+    """
+    try:
+        v = float(value)
+    except (ValueError, TypeError):
+        return None
+    if unit:
+        u = str(unit).strip().lower()
+        if u == "kw":
+            return round(v * 1000, 1)
+        if u == "w":
+            return round(v, 1)
+    if abs(v) < 10:  # legacy fallback: assume kW for small magnitudes
+        return round(v * 1000, 1)
+    return round(v, 1)
 
 
 def _parse_energy_menu(menu_data: dict) -> dict:
@@ -317,14 +345,8 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         if value is None:
             return None
         if self._config.get("auto_watt"):
-            try:
-                v = float(value)
-                if abs(v) < 10:
-                    return round(v * 1000, 1)
-                else:
-                    return round(v, 1)
-            except (ValueError, TypeError):
-                return None
+            unit = self.coordinator.data.get(self._config.get("unit_key"))
+            return _scale_auto_watt(value, unit)
         if "scale" in self._config:
             try:
                 return round(float(value) * self._config["scale"], 1)
