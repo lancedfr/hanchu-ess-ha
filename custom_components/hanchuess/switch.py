@@ -1,18 +1,23 @@
 """Switch platform for Hanchuess - Fast charge and discharge controls."""
-import asyncio
 import logging
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
-from .const import DOMAIN
+from .const import DOMAIN, CONF_FAST_CHARGE_DURATION, DEFAULT_FAST_CHARGE_DURATION
 
 _LOGGER = logging.getLogger(__name__)
 
 # act values from Hanchu API:
 # 2, -2 = fast charge, 3, -3 = fast discharge, 0 = stop
-FAST_CHARGE_DURATION = 3600  # seconds
+
+
+def _fast_charge_duration(entry) -> int:
+    """Fast charge/discharge duration in seconds (option stored in minutes)."""
+    return entry.options.get(
+        CONF_FAST_CHARGE_DURATION, DEFAULT_FAST_CHARGE_DURATION
+    ) * 60
 
 
 async def async_setup_entry(
@@ -50,7 +55,7 @@ class FastChargeSwitch(SwitchEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         result = await self._client.async_fast_charge_discharge(
-            self._entry.data["sn"], 2, FAST_CHARGE_DURATION
+            self._entry.data["sn"], 2, _fast_charge_duration(self._entry)
         )
         if result.get("success"):
             self._attr_is_on = True
@@ -95,7 +100,7 @@ class FastDischargeSwitch(SwitchEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         result = await self._client.async_fast_charge_discharge(
-            self._entry.data["sn"], 3, FAST_CHARGE_DURATION
+            self._entry.data["sn"], 3, _fast_charge_duration(self._entry)
         )
         if result.get("success"):
             self._attr_is_on = True

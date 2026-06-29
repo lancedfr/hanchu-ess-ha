@@ -3,7 +3,7 @@
 These require `pytest-homeassistant-custom-component` (which provides the `hass`
 fixture and custom-integration loading). The module skips if it is not installed.
 """
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,7 +14,7 @@ pytest.importorskip("pytest_homeassistant_custom_component.common")
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hanchuess.const import DOMAIN
@@ -149,3 +149,56 @@ async def test_reauth_flow_success(hass: HomeAssistant):
         assert entry.data["token"] == "new-tok"
     finally:
         patcher.stop()
+
+
+async def test_options_flow_sets_options(hass: HomeAssistant):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"sn": "SN1", "token": "tok"}, unique_id="SN1"
+    )
+    entry.add_to_hass(hass)
+
+    # OptionsFlowWithReload schedules an entry reload on success; stub it so the
+    # test does not perform real integration setup.
+    with patch.object(hass.config_entries, "async_schedule_reload", MagicMock()):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "init"
+
+        result2 = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                "realtime_interval": 120,
+                "statistics_interval": 600,
+                "fast_charge_duration": 45,
+            },
+        )
+
+    assert result2["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options == {
+        "realtime_interval": 120,
+        "statistics_interval": 600,
+        "fast_charge_duration": 45,
+    }
+
+
+async def test_options_flow_rejects_out_of_range(hass: HomeAssistant):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"sn": "SN1", "token": "tok"}, unique_id="SN1"
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    # realtime_interval below the configured minimum (30) is rejected by the
+    # voluptuous Range validator before the entry is updated.
+    with pytest.raises(InvalidData):
+        await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                "realtime_interval": 10,
+                "statistics_interval": 600,
+                "fast_charge_duration": 45,
+            },
+        )
+
+    assert entry.options == {}
