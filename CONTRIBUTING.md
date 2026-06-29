@@ -162,7 +162,89 @@ Every push and pull request runs three checks that must pass:
 
 ## Versioning & releases
 
-The integration follows [Semantic Versioning](https://semver.org/). The version
-lives in `custom_components/hanchuess/manifest.json`. On release, the
-`## [Unreleased]` section of `CHANGELOG.md` is renamed to the new version with a
-date, and a matching `vX.Y.Z` git tag is pushed.
+The integration follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+
+- **PATCH** (`1.2.6` → `1.2.7`) — bug fixes and internal changes only.
+- **MINOR** (`1.2.6` → `1.3.0`) — new, backwards-compatible entities, services,
+  or options.
+- **MAJOR** (`1.2.6` → `2.0.0`) — breaking changes (renamed/removed entities or
+  services, config that requires user action after upgrade).
+
+Releases are **automated**. Pushing a `vX.Y.Z` tag triggers the **Release**
+workflow (`.github/workflows/release.yml`), which extracts the matching section
+from `CHANGELOG.md`, builds a zip of the integration, and publishes a GitHub
+Release. HACS then offers the new tag to users. Maintainers (codeowners) perform
+releases; the steps below document the full process.
+
+### Before you start
+
+Releases are cut from `main`, so make sure it is up to date and green:
+
+- The **Tests**, **HACS validation**, and **Hassfest** workflows are passing on
+  `main` (see [CI checks](#ci-checks)).
+- Every change you intend to ship has a `CHANGELOG.md` entry under
+  `## [Unreleased]`.
+
+### 1. Choose the version
+
+Pick the next `X.Y.Z` per the SemVer rules above, based on what sits under
+`## [Unreleased]` in `CHANGELOG.md`.
+
+### 2. Bump the manifest version
+
+Edit `custom_components/hanchuess/manifest.json` and set `"version"` to the new
+`X.Y.Z` (no `v` prefix). This is the version Home Assistant and HACS display, so
+it **must** match the tag you push in step 5.
+
+### 3. Update the changelog
+
+In `CHANGELOG.md`:
+
+1. Rename the `## [Unreleased]` heading to `## [X.Y.Z] - YYYY-MM-DD` (today's
+   date, ISO format).
+2. Add a fresh, empty `## [Unreleased]` section above it for future work.
+3. Update the link reference definitions at the bottom of the file:
+   - Point the `[Unreleased]` link at `compare/vX.Y.Z...HEAD`.
+   - Add a `[X.Y.Z]` link, e.g.
+     `compare/v<previous>...vX.Y.Z`.
+
+The Release workflow reads the body between `## [X.Y.Z]` and the next `## [`
+heading and uses it as the GitHub Release notes. It **fails the release** if no
+section matches the tagged version, so the heading must read exactly
+`## [X.Y.Z]` — no `v` prefix, matching the tag with the `v` stripped.
+
+### 4. Commit the bump
+
+Open a PR (or push to `main` if you have rights) with the manifest and changelog
+changes, using a clear message, e.g.:
+
+```bash
+git commit -m "Release v1.2.7"
+```
+
+Wait for CI to go green and merge to `main` before tagging.
+
+### 5. Tag and push
+
+Tag the merge commit on `main` and push the tag — this is what starts the
+release:
+
+```bash
+git checkout main && git pull
+git tag v1.2.7          # matches manifest.json "version", with a leading v
+git push origin v1.2.7
+```
+
+### 6. Verify the release
+
+- Watch the **Release** workflow run under the repo's **Actions** tab; it should
+  finish green.
+- Check the **Releases** page: a `Hanchu ESS X.Y.Z` release should exist, with
+  the changelog section as its notes and the integration zip attached.
+- In a Home Assistant instance with HACS, the integration should offer the new
+  version as an available update.
+
+If the workflow fails, the most common causes are a `CHANGELOG.md` heading that
+doesn't match the tag (step 3) or a manifest/tag version mismatch (steps 2 and 5).
+Fix the cause on `main`, delete and re-push the tag
+(`git push origin :v1.2.7` then re-tag), and the workflow will run again.

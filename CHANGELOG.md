@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-Entries up to and including 1.2.4 are summarized from the git history and tags;
+Entries up to and including 1.2.7 are summarised from the git history and tags;
 later versions are tracked here going forward.
 
 ## [Unreleased]
@@ -23,20 +23,28 @@ later versions are tracked here going forward.
   Dependabot config (GitHub Actions + pip).
 
 ### Changed
-- Power sensors are normalised to watts using the Hanchu API's explicit per-field
-  unit (`<field>Unit`), falling back to the legacy magnitude heuristic only when
-  no unit is present.
 - README: corrected the setup instructions (account/password + device selection,
   no manual serial entry) and documented the options flow.
 
 ### Removed
 - Unused screenshot images under `docs/`.
 
-## [1.2.6] - 2026-06-28
+## [1.2.7] - 2026-06-29
+
+### Changed
+- Power sensors are normalised to watts using the Hanchu API's explicit per-field
+  unit (`<field>Unit`), falling back to the legacy magnitude heuristic only when
+  no unit is present.
+
+## [1.2.6] - 2026-06-24
 
 ### Added
 - Test suite (offline logic, mocked API, config-flow, opt-in live API) and a
   GitHub Actions **Tests** workflow.
+
+## [1.2.5] - 2026-06-24
+
+### Added
 - Sensor translations (English and Simplified Chinese).
 
 ## [1.2.4] - 2026-06-20
@@ -64,8 +72,10 @@ later versions are tracked here going forward.
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.7...HEAD
+[1.2.7]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.4...v1.2.6
+[1.2.5]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.0...v1.2.3
 [1.2.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.1.0...v1.2.0
