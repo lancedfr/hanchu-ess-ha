@@ -35,6 +35,18 @@
       "reauth_successful": "重新认证成功"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hanchuess 选项",
+        "data": {
+          "realtime_interval": "实时轮询间隔（秒）",
+          "statistics_interval": "统计轮询间隔（秒）",
+          "fast_charge_duration": "快充/快放时长（分钟）"
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "device_status": { "name": "设备状态" },

@@ -35,6 +35,18 @@
       "reauth_successful": "Re-authentication successful"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hanchuess Options",
+        "data": {
+          "realtime_interval": "Realtime poll interval (seconds)",
+          "statistics_interval": "Statistics poll interval (seconds)",
+          "fast_charge_duration": "Fast charge/discharge duration (minutes)"
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "device_status": { "name": "Device Status" },

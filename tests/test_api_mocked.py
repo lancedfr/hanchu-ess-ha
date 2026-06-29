@@ -2,7 +2,7 @@
 
 These run fully offline — no live credentials, no Home Assistant — by mocking the
 aiohttp layer with aioresponses. They pin the API client's behaviour and error
-contract (see plans/P1-09-api-error-contract.md).
+contract.
 """
 import asyncio
 

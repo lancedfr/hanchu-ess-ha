@@ -6,12 +6,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from .api import HanchuessApiClient, ReauthRequired
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    CONF_REALTIME_INTERVAL,
+    CONF_STATISTICS_INTERVAL,
+    DEFAULT_REALTIME_INTERVAL,
+    DEFAULT_STATISTICS_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-REALTIME_INTERVAL = timedelta(seconds=60)
-STATISTICS_INTERVAL = timedelta(minutes=5)
 
 
 def _raise_auth_failed(client: HanchuessApiClient, msg: str):
@@ -42,7 +45,11 @@ class HanchuessRealtimeCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="hanchuess_realtime",
-            update_interval=REALTIME_INTERVAL,
+            update_interval=timedelta(
+                seconds=entry.options.get(
+                    CONF_REALTIME_INTERVAL, DEFAULT_REALTIME_INTERVAL
+                )
+            ),
         )
         self.entry = entry
         self.client = client
@@ -85,7 +92,11 @@ class HanchuessStatisticsCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="hanchuess_statistics",
-            update_interval=STATISTICS_INTERVAL,
+            update_interval=timedelta(
+                seconds=entry.options.get(
+                    CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL
+                )
+            ),
         )
         self.entry = entry
         self.client = client
