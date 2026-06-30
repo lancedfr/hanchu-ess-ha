@@ -177,6 +177,11 @@ publishes a GitHub Release with that zip attached. HACS then offers the new tag
 to users. Maintainers (codeowners) perform releases; the steps below document the
 full process.
 
+Releases can only be cut from `main`. The workflow's first step verifies the
+tagged commit is contained in `origin/main` (`git merge-base --is-ancestor`) and
+**fails before building or publishing anything** if it isn't. A tag pushed on a
+feature branch that was never merged to `main` will not produce a release.
+
 `hacs.json` sets `"zip_release": true` and `"filename": "hanchuess.zip"`, so HACS
 installs the integration **from this attached zip**, not from the tagged source
 tree. The zip is therefore load-bearing: if the Release workflow fails to build
@@ -254,6 +259,7 @@ git push origin v1.2.7
   version as an available update and install it from the attached zip.
 
 If the workflow fails, the most common causes are a `CHANGELOG.md` heading that
-doesn't match the tag (step 3) or a manifest/tag version mismatch (steps 2 and 5).
-Fix the cause on `main`, delete and re-push the tag
+doesn't match the tag (step 3), a manifest/tag version mismatch (steps 2 and 5),
+or a tag placed on a commit that isn't on `main` (step 5 — the workflow rejects
+it). Fix the cause on `main`, delete and re-push the tag
 (`git push origin :v1.2.7` then re-tag), and the workflow will run again.
