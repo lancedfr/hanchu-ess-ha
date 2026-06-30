@@ -5,22 +5,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-Entries up to and including 1.2.7 are summarised from the git history and tags;
+Entries up to and including 1.2.9 are summarised from the git history and tags;
 later versions are tracked here going forward.
 
 ## [Unreleased]
+
+## [1.2.9] - 2026-06-29
 
 ### Added
 - Options flow (integration → **Configure**) to set the realtime and statistics
   poll intervals and the fast charge/discharge duration, without re-adding the
   integration. The entry reloads automatically when options change.
-- Diagnostics support — downloadable, token/serial-redacted JSON from the
-  integration and device pages, including the cached device status, statistics,
-  resolved menu limits, and startup values.
-- `quality_scale.yaml` tracking progress against Home Assistant's integration
-  quality scale.
-- `CONTRIBUTING.md`, this `CHANGELOG.md`, GitHub issue/PR templates, and a
-  Dependabot config (GitHub Actions + pip).
 
 ### Changed
 - README: corrected the setup instructions (account/password + device selection,
@@ -28,6 +23,15 @@ later versions are tracked here going forward.
 
 ### Removed
 - Unused screenshot images under `docs/`.
+
+## [1.2.8] - 2026-06-29
+
+### Added
+- Diagnostics support — downloadable, token/serial-redacted JSON from the
+  integration and device pages, including the cached device status, statistics,
+  resolved menu limits, and startup values.
+`quality_scale.yaml` tracking progress against Home Assistant's integration
+    quality scale.
 
 ## [1.2.7] - 2026-06-29
 
@@ -72,9 +76,11 @@ later versions are tracked here going forward.
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.7...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.8...v1.2.9
+[1.2.8]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.6...v1.2.7
-[1.2.6]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.4...v1.2.6
+[1.2.6]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.0...v1.2.3
