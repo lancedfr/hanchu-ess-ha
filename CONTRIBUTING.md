@@ -21,6 +21,8 @@ logger:
 A redacted diagnostics download (integration → **Download diagnostics**) is the
 most useful attachment — it strips tokens and serials automatically.
 
+Note: this is an independent, unofficial fork. Issues with the Hanchu app or cloud API itself (rather than this integration) should be reported to Hanchu directly, not here.
+
 ## Development setup
 
 Create and activate a virtual environment, then install the test dependencies
