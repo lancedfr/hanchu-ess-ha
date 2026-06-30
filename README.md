@@ -123,6 +123,16 @@ Assistant raises a repair so you can sign in again without re-adding the
 integration. When the token expires, entities first show as unavailable, a repair
 prompt appears, and signing in restores them.
 
+## Configuration Options
+
+After initial setup, polling intervals and fast charge duration can be adjusted via **Settings → Devices & Services → Hanchuess → Configure**:
+
+| Option | Default | Range | Description |
+|---|---|---|---|
+| Realtime poll interval | 60s | 30–3600s | How often live sensor data is refreshed |
+| Statistics poll interval | 300s | 300–86400s | How often daily energy totals are refreshed |
+| Fast charge duration | 60 min | 5–240 min | Default duration when triggering fast charge/discharge |
+
 ## Predbat Integration
 
 This integration is compatible with [Predbat](https://github.com/springfall2008/batpow) for intelligent battery scheduling.
@@ -247,6 +257,19 @@ instructions, CI checks, and the contribution workflow are documented in
 
 - Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
 - Token refresh is handled automatically every 25 days
+
+## Diagnostics
+
+This integration supports Home Assistant's built-in diagnostics download. To download a diagnostics report:
+
+1. Go to **Settings → Devices & Services**
+2. Find the Hanchuess integration and click **three dots → Download diagnostics**
+
+The report includes system information, integration config, live device state, and statistics. The following sensitive fields are automatically redacted:
+
+`token`, `account`, `password`, `sn`, `stationId`, `username`, `pwd`, `unique_id`, `title`
+
+This is useful when reporting issues — you can share the diagnostics file without exposing credentials.
 
 ## Credits
 Based on the original work by guoxiatech.
