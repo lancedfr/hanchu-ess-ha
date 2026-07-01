@@ -45,39 +45,39 @@ class HanchuessApiClient:
         return headers
 
     async def _request(self, path: str, data: dict, language: str = None, retries: int = 3) -> dict:
-    url = f"{self._domain}{path}"
-    _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
-    last_err = None
-    for attempt in range(1, retries + 1):
-        try:
-            async with async_timeout.timeout(10):
-                async with aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-                ) as session:
-                    async with session.post(
-                        url, json=data, headers=self._headers(language)
-                    ) as response:
-                        result = await response.json(content_type=None)
-                        _LOGGER.debug("[HANCHUESS] response: %s status=%s body=%s", path, response.status, str(result)[:500])
-                        if response.status == 401:
-                            return {"success": False, "code": 401}
-                        if response.status == 200:
-                            if result.get("code") == 401:
+        url = f"{self._domain}{path}"
+        _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
+        last_err = None
+        for attempt in range(1, retries + 1):
+            try:
+                async with async_timeout.timeout(10):
+                    async with aiohttp.ClientSession(
+                        connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                    ) as session:
+                        async with session.post(
+                            url, json=data, headers=self._headers(language)
+                        ) as response:
+                            result = await response.json(content_type=None)
+                            _LOGGER.debug("[HANCHUESS] response: %s status=%s body=%s", path, response.status, str(result)[:500])
+                            if response.status == 401:
                                 return {"success": False, "code": 401}
-                            return result
-                        _LOGGER.error("[HANCHUESS] unexpected status: %s %s", response.status, str(result)[:200])
-        except TimeoutError:
-            last_err = "timeout"
-            _LOGGER.warning("[HANCHUESS] Request timeout (attempt %s/%s): %s", attempt, retries, url)
-        except Exception as err:
-            last_err = str(err)
-            _LOGGER.warning("[HANCHUESS] Request error (attempt %s/%s): %s - %s", attempt, retries, url, err)
+                            if response.status == 200:
+                                if result.get("code") == 401:
+                                    return {"success": False, "code": 401}
+                                return result
+                            _LOGGER.error("[HANCHUESS] unexpected status: %s %s", response.status, str(result)[:200])
+            except TimeoutError:
+                last_err = "timeout"
+                _LOGGER.warning("[HANCHUESS] Request timeout (attempt %s/%s): %s", attempt, retries, url)
+            except Exception as err:
+                last_err = str(err)
+                _LOGGER.warning("[HANCHUESS] Request error (attempt %s/%s): %s - %s", attempt, retries, url, err)
 
-        if attempt < retries:
-            await asyncio.sleep(2 * attempt)
+            if attempt < retries:
+                await asyncio.sleep(2 * attempt)
 
-    _LOGGER.error("[HANCHUESS] Request failed after %s attempts: %s (%s)", retries, url, last_err)
-    return None
+        _LOGGER.error("[HANCHUESS] Request failed after %s attempts: %s (%s)", retries, url, last_err)
+        return None
 
     async def async_login(self, account: str, password: str) -> str | None:
         result = await self._request(
