@@ -10,6 +10,22 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-07-01
+
+### Fixed
+- `iotSet` requests to Hanchu's cloud API now retry up to 3 times with
+  backoff (2s, 4s) on timeout or connection error, instead of failing
+  silently on the first attempt. Addresses an issue where a transient
+  network fault (e.g. an ISP-side outage) could cause a time-slot write to
+  time out with no retry, leaving the previous schedule active on the
+  device despite the write appearing to have been sent.
+- Time slot entities (`time.py`) now revert to the last *confirmed* value
+  if a write ultimately fails after all retries, instead of permanently
+  showing the requested value regardless of whether the device actually
+  accepted it. Previously a failed write left the entity's displayed state
+  incorrect indefinitely, which meant automations checking the entity state
+  after a write could not detect the failure.
+
 ## [1.2.10] - 2026-06-30
 
 ### Added
