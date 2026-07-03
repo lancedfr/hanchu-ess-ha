@@ -284,9 +284,32 @@ Override with flags when needed:
 bash scripts/deploy-ha.sh \
   --host 192.168.0.110 \
   --user root \
-  --local-dir "/c/Users/lance/IdeaProjects/hanchu-ess-ha/custom_components/hanchuess" \
+  --local-dir "/c/Projects/hanchu-ess-ha/custom_components/hanchuess" \
   --remote-dir "homeassistant/custom_components/hanchuess"
 ```
 
+Each deployment run first calls `scripts/backup-ha.sh`, which downloads the current
+remote integration directory to a timestamped local backup folder under
+`.ha-deploy-backups/` at the repo root. Override backup location with
+`--backup-root`.
+
 Authentication prompts normally at runtime. For non-interactive runs, set
 `HANCHUESS_SFTP_PASSWORD` or pass `--password` (requires `sshpass`).
+
+To run backup manually:
+
+```bash
+bash scripts/backup-ha.sh \
+  --host 192.168.0.110 \
+  --user root
+```
+
+To restore from a backup:
+
+```bash
+bash scripts/restore-ha.sh \
+  --host 192.168.0.110 \
+  --user root \
+  --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000"
+```
+
