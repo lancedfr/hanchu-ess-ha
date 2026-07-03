@@ -4,6 +4,7 @@ Importing the platform modules requires the `homeassistant` package, so the whol
 module skips if it is unavailable.
 """
 from datetime import time as dt_time
+import math
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -122,6 +123,54 @@ def test_load_power_is_raw_watts():
 def test_auto_watt_non_numeric_returns_none():
     s = _make_sensor({"key": "batP", "auto_watt": True}, "not-a-number")
     assert s.native_value is None
+
+
+def test_battery_charge_power_uses_positive_side():
+    s = _make_sensor(SENSORS["battery_charge_power"], 1.2, unit="kW")
+    assert s.native_value == 1200.0
+
+
+def test_battery_charge_power_negative_side_is_zero():
+    s = _make_sensor(SENSORS["battery_charge_power"], -1.2, unit="kW")
+    assert s.native_value == 0.0
+
+
+def test_battery_discharge_power_negative_side_becomes_positive():
+    s = _make_sensor(SENSORS["battery_discharge_power"], -1.2, unit="kW")
+    assert s.native_value == 1200.0
+
+
+def test_battery_discharge_power_positive_side_is_zero():
+    s = _make_sensor(SENSORS["battery_discharge_power"], 1.2, unit="kW")
+    assert s.native_value == 0.0
+
+
+def test_grid_import_power_uses_positive_side():
+    s = _make_sensor(SENSORS["grid_import_power"], 800, unit="W")
+    assert s.native_value == 800.0
+
+
+def test_grid_export_power_negative_side_becomes_positive():
+    s = _make_sensor(SENSORS["grid_export_power"], -800, unit="W")
+    assert s.native_value == 800.0
+
+
+def test_derived_directional_power_zero_stays_zero():
+    s = _make_sensor(SENSORS["grid_import_power"], 0, unit="W")
+    assert s.native_value == 0.0
+    assert math.copysign(1.0, s.native_value) == 1.0
+    s = _make_sensor(SENSORS["grid_export_power"], 0, unit="W")
+    assert s.native_value == 0.0
+    assert math.copysign(1.0, s.native_value) == 1.0
+
+
+def test_derived_directional_power_negative_zero_is_canonical_zero():
+    s = _make_sensor(SENSORS["grid_import_power"], -0.0, unit="W")
+    assert s.native_value == 0.0
+    assert math.copysign(1.0, s.native_value) == 1.0
+    s = _make_sensor(SENSORS["grid_export_power"], -0.0, unit="W")
+    assert s.native_value == 0.0
+    assert math.copysign(1.0, s.native_value) == 1.0
 
 
 def test_auto_watt_missing_value_returns_none():
