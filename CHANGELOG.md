@@ -10,6 +10,27 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+### Added
+- Battery discovery in setup/config flow: each selected inverter now resolves
+  station ID and station battery list, then stores discovered battery serials.
+- Per-battery child devices and sensors for:
+  `tBat1`, `tBat2`, `tBat3`, `tBat4`, `tEnv`, `tPack`, `tMos`, `socPack`,
+  `vPack`, and `iPack`.
+- Dedicated **Battery poll interval** option (default 60s, range 30-3600s).
+- API client support for encrypted platform endpoints:
+  `/gateway/platform/pcs/detail`,
+  `/gateway/platform/station/detail`,
+  `/gateway/platform/bmsInfo/queryBatteryDataDivisions`.
+
+### Changed
+- Diagnostics now include discovered battery metadata and battery coordinator data.
+- README updated with battery discovery/device behavior, new sensors, and battery polling option.
+
+### Testing
+- Added mocked unit tests for encrypted platform API calls and battery discovery chaining.
+- Added config-flow tests for battery discovery persistence and updated options payload.
+- Added opt-in real-world API integration tests for the new battery discovery/detail endpoints.
+
 ## [1.2.11] - 2026-07-01
 
 ### Fixed

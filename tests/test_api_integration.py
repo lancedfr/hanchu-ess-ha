@@ -131,6 +131,38 @@ async def test_iot_get(client, sn, dev_type):
 
 
 # ---------------------------------------------------------------------------
+# Battery discovery/details endpoints (encrypted platform API)
+# ---------------------------------------------------------------------------
+
+async def test_get_pcs_detail_contains_station_id(client, sn):
+    data = await client.async_get_pcs_detail(sn)
+    assert isinstance(data, dict)
+    assert "_token_expired" not in data
+    assert data.get("stationId"), f"stationId missing in pcs detail payload: {data}"
+
+
+async def test_get_station_batteries_returns_list(client, sn):
+    station_id, batteries = await client.async_get_station_batteries(sn)
+    assert station_id, "station_id missing from station battery discovery"
+    assert isinstance(batteries, list)
+
+
+async def test_get_battery_detail_for_first_station_battery(client, sn):
+    _, batteries = await client.async_get_station_batteries(sn)
+    if not batteries:
+        pytest.skip("No station batteries found for this inverter")
+
+    battery_sn = batteries[0].get("sn") or batteries[0].get("devId")
+    if not battery_sn:
+        pytest.skip("First battery has no sn/devId")
+
+    data = await client.async_get_battery_detail(battery_sn)
+    assert isinstance(data, dict)
+    assert "_token_expired" not in data
+    assert data.get("sn") in (battery_sn, None)
+
+
+# ---------------------------------------------------------------------------
 # Write-path tests (require HANCHUESS_SN + HANCHUESS_ALLOW_WRITE=1)
 # ---------------------------------------------------------------------------
 

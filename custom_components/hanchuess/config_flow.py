@@ -11,9 +11,11 @@ from .const import (
     BASE_URL,
     CONF_REALTIME_INTERVAL,
     CONF_STATISTICS_INTERVAL,
+    CONF_BATTERY_INTERVAL,
     CONF_FAST_CHARGE_DURATION,
     DEFAULT_REALTIME_INTERVAL,
     DEFAULT_STATISTICS_INTERVAL,
+    DEFAULT_BATTERY_INTERVAL,
     DEFAULT_FAST_CHARGE_DURATION,
 )
 from .api import HanchuessApiClient
@@ -27,6 +29,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self):
         self._token = None
         self._devices = []
+        self._client = None
 
     @staticmethod
     @callback
@@ -39,6 +42,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         existing = self.hass.data.get(DOMAIN, {})
         shared_client = existing.get("_client")
         if shared_client and shared_client.token:
+            self._client = shared_client
             self._token = shared_client.token
             self._devices = await shared_client.async_get_devices()
             if self._devices:
@@ -51,6 +55,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input["account"], user_input["password"]
             )
             if token:
+                self._client = client
                 self._token = client.token
                 self._devices = await client.async_get_devices()
                 if self._devices:
@@ -82,27 +87,26 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 # Find devType
-                dev_type = "2"
-                for d in self._devices:
-                    if d["sn"] == sn:
-                        dev_type = d.get("devType", "2")
-                        break
+                dev_type = self._find_device_type(sn)
+                batteries = await self._discover_batteries(sn)
 
                 # Build pending devices with devType
                 pending = []
                 for p_sn in selected[1:]:
-                    p_type = "2"
-                    for d in self._devices:
-                        if d["sn"] == p_sn:
-                            p_type = d.get("devType", "2")
-                            break
-                    pending.append({"sn": p_sn, "devType": p_type})
+                    pending.append(
+                        {
+                            "sn": p_sn,
+                            "devType": self._find_device_type(p_sn),
+                            "batteries": await self._discover_batteries(p_sn),
+                        }
+                    )
 
                 return self.async_create_entry(
                     title=f"Hanchuess {sn}",
                     data={
                         "sn": sn,
                         "dev_type": dev_type,
+                        "batteries": batteries,
                         "token": self._token,
                         "pending_devices": pending,
                     },
@@ -140,6 +144,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data={
                 "sn": sn,
                 "dev_type": data.get("dev_type", "2"),
+                "batteries": data.get("batteries", []),
                 "token": data["token"],
                 "pending_devices": [],
             },
@@ -186,6 +191,31 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    def _find_device_type(self, sn: str) -> str:
+        for device in self._devices:
+            if device["sn"] == sn:
+                return device.get("devType", "2")
+        return "2"
+
+    async def _discover_batteries(self, sn: str) -> list[dict]:
+        if not self._client:
+            return []
+        station_id, bms_list = await self._client.async_get_station_batteries(sn)
+        batteries = []
+        for battery in bms_list:
+            bms_sn = battery.get("sn") or battery.get("devId")
+            if not bms_sn:
+                continue
+            batteries.append(
+                {
+                    "sn": bms_sn,
+                    "devId": battery.get("devId", bms_sn),
+                    "stationId": battery.get("stationId", station_id),
+                }
+            )
+        _LOGGER.debug("[HANCHUESS] discovered %s batteries for inverter %s", len(batteries), sn)
+        return batteries
+
 
 class HanchuessOptionsFlow(OptionsFlowWithReload):
     """Options flow: poll intervals and fast-charge duration."""
@@ -203,6 +233,10 @@ class HanchuessOptionsFlow(OptionsFlowWithReload):
             vol.Required(
                 CONF_STATISTICS_INTERVAL,
                 default=options.get(CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
+            vol.Required(
+                CONF_BATTERY_INTERVAL,
+                default=options.get(CONF_BATTERY_INTERVAL, DEFAULT_BATTERY_INTERVAL),
             ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
             vol.Required(
                 CONF_FAST_CHARGE_DURATION,

@@ -4,6 +4,7 @@ import logging
 import time
 import aiohttp
 import async_timeout
+from .crypto import _encrypt_payload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,11 +31,10 @@ class HanchuessApiClient:
     def token(self) -> str:
         return self._token
 
-    def _headers(self, language: str = None) -> dict:
-        headers = {
-            "Content-Type": "application/json",
-            "appPlat": "ha",
-        }
+    def _headers(self, language: str = None, include_content_type: bool = True) -> dict:
+        headers = {"appPlat": "ha"}
+        if include_content_type:
+            headers["Content-Type"] = "application/json"
         if self._token:
             headers["access-token"] = self._token
         if language:
@@ -44,19 +44,30 @@ class HanchuessApiClient:
             headers["locale"] = language
         return headers
 
-    async def _request(self, path: str, data: dict, language: str = None, retries: int = 3) -> dict:
+    async def _request(
+        self,
+        path: str,
+        data: dict,
+        language: str = None,
+        retries: int = 3,
+        encrypted: bool = False,
+    ) -> dict:
         url = f"{self._domain}{path}"
         _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
         last_err = None
         for attempt in range(1, retries + 1):
             try:
+                headers = self._headers(language, include_content_type=not encrypted)
+                request_kwargs = {"headers": headers}
+                if encrypted:
+                    request_kwargs["data"] = _encrypt_payload(data)
+                else:
+                    request_kwargs["json"] = data
                 async with async_timeout.timeout(10):
                     async with aiohttp.ClientSession(
                         connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
                     ) as session:
-                        async with session.post(
-                            url, json=data, headers=self._headers(language)
-                        ) as response:
+                        async with session.post(url, **request_kwargs) as response:
                             result = await response.json(content_type=None)
                             _LOGGER.debug("[HANCHUESS] response: %s status=%s body=%s", path, response.status, str(result)[:500])
                             if response.status == 401:
@@ -197,3 +208,53 @@ class HanchuessApiClient:
         if result and result.get("success"):
             return {"success": True, "data": result.get("data", {})}
         return {"success": False, "msg": result.get("msg", "Unknown error") if result else "Request failed"}
+
+    async def async_get_pcs_detail(self, sn: str) -> dict | None:
+        result = await self._request(
+            "/gateway/platform/pcs/detail",
+            {"sn": sn},
+            encrypted=True,
+        )
+        if result and result.get("code") == 401:
+            return {"_token_expired": True}
+        if result and result.get("success"):
+            return result.get("data", {})
+        return {}
+
+    async def async_get_station_detail(self, station_id: str) -> dict | None:
+        result = await self._request(
+            "/gateway/platform/station/detail",
+            {"stationId": station_id},
+            encrypted=True,
+        )
+        if result and result.get("code") == 401:
+            return {"_token_expired": True}
+        if result and result.get("success"):
+            return result.get("data", {})
+        return {}
+
+    async def async_get_battery_detail(self, device_id: str) -> dict | None:
+        result = await self._request(
+            "/gateway/platform/bmsInfo/queryBatteryDataDivisions",
+            {"deviceId": device_id},
+            encrypted=True,
+        )
+        if result and result.get("code") == 401:
+            return {"_token_expired": True}
+        if result and result.get("success"):
+            return result.get("data", {})
+        return {}
+
+    async def async_get_station_batteries(self, sn: str) -> tuple[str | None, list[dict]]:
+        pcs = await self.async_get_pcs_detail(sn)
+        if not pcs or pcs.get("_token_expired"):
+            return None, []
+
+        station_id = pcs.get("stationId")
+        if not station_id:
+            return None, []
+
+        station = await self.async_get_station_detail(station_id)
+        if not station or station.get("_token_expired"):
+            return station_id, []
+        return station_id, station.get("bmsList", [])

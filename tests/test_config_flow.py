@@ -47,6 +47,7 @@ def _patched_client(token="tok", devices=None):
     instance.async_get_devices = AsyncMock(
         return_value=devices if devices is not None else []
     )
+    instance.async_get_station_batteries = AsyncMock(return_value=(None, []))
     return patcher, instance
 
 
@@ -79,7 +80,40 @@ async def test_user_flow_creates_entry(hass: HomeAssistant):
         assert result3["type"] == FlowResultType.CREATE_ENTRY
         assert result3["data"]["sn"] == "SN1"
         assert result3["data"]["dev_type"] == "2"
+        assert result3["data"]["batteries"] == []
         assert result3["data"]["token"] == "tok"
+    finally:
+        patcher.stop()
+
+
+async def test_user_flow_discovers_batteries_for_selected_device(hass: HomeAssistant):
+    patcher, instance = _patched_client(
+        token="tok", devices=[{"sn": "SN1", "devType": "2"}]
+    )
+    instance.async_get_station_batteries = AsyncMock(
+        return_value=(
+            "ST1",
+            [{"sn": "BAT1", "devId": "BAT1", "stationId": "ST1"}],
+        )
+    )
+    try:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"account": "a", "password": "p"}
+        )
+        with patch(
+            "custom_components.hanchuess.async_setup_entry", return_value=True
+        ):
+            result3 = await hass.config_entries.flow.async_configure(
+                result2["flow_id"], {"devices": ["SN1"]}
+            )
+            await hass.async_block_till_done()
+        assert result3["type"] == FlowResultType.CREATE_ENTRY
+        assert result3["data"]["batteries"] == [
+            {"sn": "BAT1", "devId": "BAT1", "stationId": "ST1"}
+        ]
     finally:
         patcher.stop()
 
@@ -169,6 +203,7 @@ async def test_options_flow_sets_options(hass: HomeAssistant):
             {
                 "realtime_interval": 120,
                 "statistics_interval": 600,
+                "battery_interval": 600,
                 "fast_charge_duration": 45,
             },
         )
@@ -177,6 +212,7 @@ async def test_options_flow_sets_options(hass: HomeAssistant):
     assert entry.options == {
         "realtime_interval": 120,
         "statistics_interval": 600,
+        "battery_interval": 600,
         "fast_charge_duration": 45,
     }
 
@@ -197,6 +233,7 @@ async def test_options_flow_rejects_out_of_range(hass: HomeAssistant):
             {
                 "realtime_interval": 10,
                 "statistics_interval": 600,
+                "battery_interval": 600,
                 "fast_charge_duration": 45,
             },
         )

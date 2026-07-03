@@ -6,7 +6,14 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfPower, UnitOfEnergy
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfPower,
+    UnitOfEnergy,
+    UnitOfTemperature,
+    UnitOfElectricPotential,
+    UnitOfElectricCurrent,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -146,6 +153,79 @@ STATISTICS_SENSORS = {
         "icon": "mdi:engine",
         "condition_key": "hasDg",
         "condition_value": 1,
+    },
+}
+
+BATTERY_SENSORS = {
+    "battery_tbat1_temp": {
+        "key": "tBat1",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "battery_tbat2_temp": {
+        "key": "tBat2",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "battery_tbat3_temp": {
+        "key": "tBat3",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "battery_tbat4_temp": {
+        "key": "tBat4",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "battery_env_temp": {
+        "key": "tEnv",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer-lines",
+    },
+    "battery_pack_temp": {
+        "key": "tPack",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "battery_mos_temp": {
+        "key": "tMos",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+    },
+    "battery_pack_soc": {
+        "key": "socPack",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "icon": "mdi:battery",
+    },
+    "battery_pack_voltage": {
+        "key": "vPack",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+        "icon": "mdi:sine-wave",
+    },
+    "battery_pack_current": {
+        "key": "iPack",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+        "icon": "mdi:current-dc",
     },
 }
 
@@ -291,6 +371,7 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     realtime = data["realtime"]
     statistics = data["statistics"]
+    battery = data.get("battery")
     entities = []
     entities.append(DeviceStatusSensor(realtime, entry))
     for sensor_key, config in SENSORS.items():
@@ -305,6 +386,26 @@ async def async_setup_entry(
             if statistics.data.get(cond_key) != config.get("condition_value"):
                 continue
         entities.append(HanchueSensor(statistics, entry, sensor_key, config))
+
+    battery_devices = entry.data.get("batteries", [])
+    if battery:
+        for battery_info in battery_devices:
+            if isinstance(battery_info, dict):
+                battery_sn = battery_info.get("sn") or battery_info.get("devId")
+            else:
+                battery_sn = str(battery_info)
+            if not battery_sn:
+                continue
+            for sensor_key, config in BATTERY_SENSORS.items():
+                entities.append(
+                    HanchuessBatterySensor(
+                        battery,
+                        entry,
+                        battery_sn,
+                        sensor_key,
+                        config,
+                    )
+                )
     async_add_entities(entities)
 
 
@@ -420,3 +521,49 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
             self._work_mode_options = parsed["work_mode_options"]
             self._energy_fields = parsed["fields"]
             self._menu_loaded = True
+
+
+class HanchuessBatterySensor(CoordinatorEntity, SensorEntity):
+    def __init__(self, coordinator, entry, battery_sn: str, sensor_key: str, config: dict):
+        super().__init__(coordinator)
+        self._entry = entry
+        self._battery_sn = battery_sn
+        self._sensor_key = sensor_key
+        self._config = config
+        self._attr_unique_id = f"{entry.data['sn']}_{battery_sn}_{sensor_key}"
+        self._attr_icon = config.get("icon")
+        self._attr_has_entity_name = True
+        self._attr_translation_key = sensor_key
+        if "device_class" in config:
+            self._attr_device_class = config["device_class"]
+        if "state_class" in config:
+            self._attr_state_class = config["state_class"]
+        if "unit" in config:
+            self._attr_native_unit_of_measurement = config["unit"]
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        battery_data = {}
+        if isinstance(self.coordinator.data, dict):
+            battery_data = self.coordinator.data.get(self._battery_sn, {})
+        model = battery_data.get("devModel", "Battery")
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"{self._entry.data['sn']}_{self._battery_sn}")},
+            name=f"Hanchuess Battery {self._battery_sn}",
+            manufacturer="Hanchu",
+            model=f"BMS {model}",
+            via_device=(DOMAIN, self._entry.data["sn"]),
+        )
+
+    @property
+    def native_value(self):
+        if not isinstance(self.coordinator.data, dict):
+            return None
+        battery_data = self.coordinator.data.get(self._battery_sn, {})
+        value = battery_data.get(self._config["key"])
+        if value is None:
+            return None
+        try:
+            return round(float(value), 2)
+        except (ValueError, TypeError):
+            return value

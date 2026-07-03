@@ -9,6 +9,7 @@ import asyncio
 import aiohttp
 import pytest
 from aioresponses import aioresponses
+from aioresponses.core import CallbackResult
 
 from custom_components.hanchuess.api import HanchuessApiClient, ReauthRequired
 from custom_components.hanchuess.const import BASE_URL
@@ -22,6 +23,9 @@ MENU = f"{BASE_URL}/gateway/app/ha/menu"
 IOT_GET = f"{BASE_URL}/gateway/app/ha/iotGet"
 IOT_SET = f"{BASE_URL}/gateway/app/ha/iotSet"
 FAST = f"{BASE_URL}/gateway/app/ha/fastChargeDischarge"
+PCS_DETAIL = f"{BASE_URL}/gateway/platform/pcs/detail"
+STATION_DETAIL = f"{BASE_URL}/gateway/platform/station/detail"
+BATTERY_DETAIL = f"{BASE_URL}/gateway/platform/bmsInfo/queryBatteryDataDivisions"
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +238,62 @@ async def test_fast_charge_request_failed():
         m.post(FAST, status=500)  # unexpected status -> _request returns None
         result = await client.async_fast_charge_discharge("SN1", 2, 3600)
     assert result == {"success": False, "msg": "Request failed"}
+
+
+# ---------------------------------------------------------------------------
+# Encrypted platform endpoints (battery discovery/details)
+# ---------------------------------------------------------------------------
+
+async def test_get_pcs_detail_uses_encrypted_body_without_content_type():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    captured = {}
+
+    def _callback(_url, **kwargs):
+        captured["headers"] = kwargs.get("headers", {})
+        captured["data"] = kwargs.get("data")
+        captured["json"] = kwargs.get("json")
+        return CallbackResult(status=200, payload={"success": True, "data": {"stationId": "ST1"}})
+
+    with aioresponses() as m:
+        m.post(PCS_DETAIL, callback=_callback)
+        data = await client.async_get_pcs_detail("SN1")
+
+    assert data == {"stationId": "ST1"}
+    assert captured["json"] is None
+    assert isinstance(captured["data"], str)
+    assert "Content-Type" not in captured["headers"]
+
+
+async def test_get_station_detail_returns_bms_list():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    with aioresponses() as m:
+        m.post(
+            STATION_DETAIL,
+            payload={"success": True, "data": {"bmsList": [{"sn": "BAT1"}]}},
+        )
+        data = await client.async_get_station_detail("ST1")
+    assert data["bmsList"] == [{"sn": "BAT1"}]
+
+
+async def test_get_battery_detail_success():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    with aioresponses() as m:
+        m.post(BATTERY_DETAIL, payload={"success": True, "data": {"sn": "BAT1", "socPack": "61.2"}})
+        data = await client.async_get_battery_detail("BAT1")
+    assert data == {"sn": "BAT1", "socPack": "61.2"}
+
+
+async def test_get_station_batteries_chains_pcs_and_station():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    with aioresponses() as m:
+        m.post(PCS_DETAIL, payload={"success": True, "data": {"stationId": "ST1"}})
+        m.post(
+            STATION_DETAIL,
+            payload={"success": True, "data": {"bmsList": [{"sn": "BAT1"}, {"sn": "BAT2"}]}},
+        )
+        station_id, batteries = await client.async_get_station_batteries("SN1")
+    assert station_id == "ST1"
+    assert [b["sn"] for b in batteries] == ["BAT1", "BAT2"]
 
 
 # ---------------------------------------------------------------------------

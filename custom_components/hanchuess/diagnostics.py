@@ -20,7 +20,11 @@ async def async_get_config_entry_diagnostics(
     diag: dict[str, Any] = {
         "entry": async_redact_data(entry.as_dict(), TO_REDACT),
         "resolved": async_redact_data(
-            {"dev_type": entry.data.get("dev_type"), "sn": entry.data.get("sn")},
+            {
+                "dev_type": entry.data.get("dev_type"),
+                "sn": entry.data.get("sn"),
+                "batteries": entry.data.get("batteries", []),
+            },
             TO_REDACT,
         ),
     }
@@ -32,6 +36,7 @@ async def async_get_config_entry_diagnostics(
 
     realtime = store.get("realtime")
     statistics = store.get("statistics")
+    battery = store.get("battery")
 
     diag["device_status"] = async_redact_data(
         getattr(realtime, "data", None) or {}, TO_REDACT
@@ -42,6 +47,9 @@ async def async_get_config_entry_diagnostics(
     diag["number_limits"] = store.get("number_limits", {})
     diag["startup_values"] = async_redact_data(
         store.get("startup_values", {}) or {}, TO_REDACT
+    )
+    diag["battery"] = async_redact_data(
+        getattr(battery, "data", None) or {}, TO_REDACT
     )
 
     return diag

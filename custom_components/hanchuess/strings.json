@@ -35,6 +35,19 @@
       "reauth_successful": "Re-authentication successful"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hanchuess Options",
+        "data": {
+          "realtime_interval": "Realtime poll interval (seconds)",
+          "statistics_interval": "Statistics poll interval (seconds)",
+          "battery_interval": "Battery poll interval (seconds)",
+          "fast_charge_duration": "Fast charge/discharge duration (minutes)"
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "device_status": { "name": "Device Status" },
@@ -53,7 +66,17 @@
       "daily_dg_energy": { "name": "Daily Generator Energy" },
       "ac_coupled_pv_power": { "name": "AC Coupled PV Power" },
       "battery_capacity": { "name": "Battery Capacity" },
-      "fast_charge_time_remaining": { "name": "Fast Charge Time Remaining" }
+      "fast_charge_time_remaining": { "name": "Fast Charge Time Remaining" },
+      "battery_tbat1_temp": { "name": "Battery Cell Temperature 1" },
+      "battery_tbat2_temp": { "name": "Battery Cell Temperature 2" },
+      "battery_tbat3_temp": { "name": "Battery Cell Temperature 3" },
+      "battery_tbat4_temp": { "name": "Battery Cell Temperature 4" },
+      "battery_env_temp": { "name": "Battery Environment Temperature" },
+      "battery_pack_temp": { "name": "Battery Pack Temperature" },
+      "battery_mos_temp": { "name": "Battery MOS Temperature" },
+      "battery_pack_soc": { "name": "Battery Pack SOC" },
+      "battery_pack_voltage": { "name": "Battery Pack Voltage" },
+      "battery_pack_current": { "name": "Battery Pack Current" }
     },
     "number": {
       "charge_power_limit": { "name": "Charge Power Limit" },

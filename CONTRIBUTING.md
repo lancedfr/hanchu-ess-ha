@@ -266,3 +266,66 @@ doesn't match the tag (step 3), a manifest/tag version mismatch (steps 2 and 5),
 or a tag placed on a commit that isn't on `main` (step 5 — the workflow rejects
 it). Fix the cause on `main`, delete and re-push the tag
 (`git push origin :v1.2.7` then re-tag), and the workflow will run again.
+
+## Quick AES payload CLI
+
+For debugging encrypted payloads locally:
+
+```powershell
+py scripts\crypto_tool.py encrypt --json "{\"sn\":\"SN123\",\"devType\":\"2\"}"
+py scripts\crypto_tool.py decrypt --cipher "<base64-ciphertext>"
+```
+
+You can also use `--file` for either command to read input from a UTF-8 text file.
+
+## Quickly deploy to test Home Assistant (Git Bash)
+
+For repeat local testing, use:
+
+```bash
+bash scripts/deploy-ha.sh
+```
+
+Defaults match a typical local setup (`root@192.168.0.110`, uploading
+`custom_components/hanchuess` to `homeassistant/custom_components/hanchuess`).
+Override with flags when needed:
+
+```bash
+bash scripts/deploy-ha.sh \
+  --host 192.168.0.110 \
+  --user root \
+  --local-dir "/c/Users/lance/IdeaProjects/hanchu-ess-ha/custom_components/hanchuess" \
+  --remote-dir "homeassistant/custom_components/hanchuess"
+```
+
+Authentication prompts normally at runtime. For non-interactive runs, set
+`HANCHUESS_SFTP_PASSWORD` or pass `--password` (requires `sshpass`).
+
+## Automated release script for maintainers with permission only (Git Bash)
+
+You can run the release flow with:
+
+```bash
+bash scripts/release.sh --version X.Y.Z --update-changelog true
+```
+
+This script automates steps 2–5 above:
+
+- bumps `custom_components/hanchuess/manifest.json` to `X.Y.Z`,
+- optionally updates `CHANGELOG.md` when `--update-changelog true`,
+- creates `Release vX.Y.Z` commit and local `vX.Y.Z` tag.
+
+By default it **does not push** to remote; it prints explicit push commands so
+you can confirm before triggering the release workflow:
+
+```bash
+git push origin main
+git push origin vX.Y.Z
+```
+
+To push automatically from the script, pass:
+
+```bash
+bash scripts/release.sh --version X.Y.Z --update-changelog true --auto-push true
+```
+

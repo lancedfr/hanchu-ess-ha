@@ -6,10 +6,15 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.components import websocket_api
+from homeassistant.helpers.update_coordinator import UpdateFailed
 import homeassistant.helpers.config_validation as cv
 from .const import DOMAIN, PLATFORMS, BASE_URL
 from .api import HanchuessApiClient
-from .coordinator import HanchuessRealtimeCoordinator, HanchuessStatisticsCoordinator
+from .coordinator import (
+    HanchuessRealtimeCoordinator,
+    HanchuessStatisticsCoordinator,
+    HanchuessBatteryCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -155,15 +160,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     client = hass.data[DOMAIN]["_client"]
 
+    sn = entry.data["sn"]
+    batteries = entry.data.get("batteries")
+    if batteries is None:
+        station_id, bms_list = await client.async_get_station_batteries(sn)
+        batteries = []
+        for battery in bms_list:
+            bms_sn = battery.get("sn") or battery.get("devId")
+            if not bms_sn:
+                continue
+            batteries.append(
+                {
+                    "sn": bms_sn,
+                    "devId": battery.get("devId", bms_sn),
+                    "stationId": battery.get("stationId", station_id),
+                }
+            )
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "batteries": batteries}
+        )
+
     coordinator = HanchuessRealtimeCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
 
     stats_coordinator = HanchuessStatisticsCoordinator(hass, entry, client)
     await stats_coordinator.async_config_entry_first_refresh()
 
+    battery_coordinator = HanchuessBatteryCoordinator(hass, entry, client)
+    try:
+        await battery_coordinator.async_config_entry_first_refresh()
+    except UpdateFailed as err:
+        _LOGGER.warning("[HANCHUESS] Battery details unavailable at startup: %s", err)
+
     # Fetch menu to get device-specific min/max values for number entities
     language = hass.config.language or "en"
-    sn = entry.data["sn"]
     number_limits = {
         "CHG_PWR_LMT": {"min": 0, "max": 5000},
         "DSCHG_PWR_LMT": {"min": 0, "max": 5000},
@@ -223,6 +253,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "realtime": coordinator,
         "statistics": stats_coordinator,
+        "battery": battery_coordinator,
         "number_limits": number_limits,
         "startup_values": startup_values,
     }
@@ -305,6 +336,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 data={
                     "sn": item["sn"],
                     "dev_type": item.get("devType", "2"),
+                    "batteries": item.get("batteries", []),
                     "token": entry.data["token"],
                 },
             )

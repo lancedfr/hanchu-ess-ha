@@ -10,6 +10,10 @@ This fork extends the original guoxiatech/hanchu-ess-ha integration — publishe
 - Battery SOC (%)
 - Battery Power (W) — signed (positive = charge, negative = discharge)
 - Battery Capacity (kWh)
+- Per-battery sensors (for each discovered battery module):
+  - Cell temperature 1-4 (`tBat1`-`tBat4`)
+  - Environment/pack/MOS temperature (`tEnv`, `tPack`, `tMos`)
+  - Pack SOC/voltage/current (`socPack`, `vPack`, `iPack`)
 - Grid Power (W) — signed (positive = import, negative = export)
 - Load Power (W)
 - PV Power (W)
@@ -105,12 +109,15 @@ devices automatically:
 2. The integration logs in and lists the inverters on your account. **Select the
    device(s)** you want to add. Each selected device is created as its own HA
    device; no serial number needs to be entered by hand.
+3. For each selected inverter, the integration discovers station batteries and
+   creates a child HA battery device per battery serial with dedicated sensors.
 
 ### Options
 
 After setup, open the integration and click **Configure** to adjust:
 - **Realtime poll interval** (default 60 s, minimum 30 s)
 - **Statistics poll interval** (default 5 min / 300 s, minimum 5 min)
+- **Battery poll interval** (default 60 s, minimum 30 s) for per-battery detail sensors
 - **Fast charge/discharge duration** (default 60 min, range 5 min–4 h) — the
   duration applied when the Fast Charge / Fast Discharge switches are turned on
 
@@ -131,6 +138,7 @@ After initial setup, polling intervals and fast charge duration can be adjusted 
 |---|---|---|---|
 | Realtime poll interval | 60s | 30–3600s | How often live sensor data is refreshed |
 | Statistics poll interval | 300s | 300–86400s | How often daily energy totals are refreshed |
+| Battery poll interval | 60s | 30–3600s | How often per-battery detail sensors are refreshed |
 | Fast charge duration | 60 min | 5–240 min | Default duration when triggering fast charge/discharge |
 
 ## Predbat Integration
@@ -485,7 +493,6 @@ instructions, CI checks, and the contribution workflow are documented in
 
 ## Known Limitations
 
-- Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
 - Token refresh is handled automatically every 25 days
 
 ## Diagnostics

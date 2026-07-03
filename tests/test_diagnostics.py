@@ -82,11 +82,13 @@ async def test_full_diagnostics_includes_all_sections():
         "resolved",
         "device_status",
         "statistics",
+        "battery",
         "number_limits",
         "startup_values",
     }
     assert diag["device_status"] == {"batSoc": 55, "loadPwr": 800}
     assert diag["statistics"] == {"loadTdEe": 12.3}
+    assert diag["battery"] == {}
     assert diag["startup_values"] == {"WORK_MODE_CMB": "1"}
 
 
