@@ -273,7 +273,7 @@ it). Fix the cause on `main`, delete and re-push the tag
 For repeat local testing, use:
 
 ```bash
-bash scripts/deploy-ha.sh
+bash tools/deploy-ha.sh
 ```
 
 Defaults match a typical local setup (`root@192.168.0.110`, uploading
@@ -281,14 +281,14 @@ Defaults match a typical local setup (`root@192.168.0.110`, uploading
 Override with flags when needed:
 
 ```bash
-bash scripts/deploy-ha.sh \
+bash tools/deploy-ha.sh \
   --host 192.168.0.110 \
   --user root \
   --local-dir "/c/Projects/hanchu-ess-ha/custom_components/hanchuess" \
   --remote-dir "homeassistant/custom_components/hanchuess"
 ```
 
-Each deployment run first calls `scripts/backup-ha.sh`, which downloads the current
+Each deployment run first calls `tools/backup-ha.sh`, which downloads the current
 remote integration directory to a timestamped local backup folder under
 `.ha-deploy-backups/` at the repo root. Override backup location with
 `--backup-root`.
@@ -299,7 +299,7 @@ Authentication prompts normally at runtime. For non-interactive runs, set
 To run backup manually:
 
 ```bash
-bash scripts/backup-ha.sh \
+bash tools/backup-ha.sh \
   --host 192.168.0.110 \
   --user root
 ```
@@ -307,7 +307,7 @@ bash scripts/backup-ha.sh \
 To restore from a backup:
 
 ```bash
-bash scripts/restore-ha.sh \
+bash tools/restore-ha.sh \
   --host 192.168.0.110 \
   --user root \
   --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000"

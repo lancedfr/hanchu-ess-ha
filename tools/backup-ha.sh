@@ -3,9 +3,10 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: restore-ha.sh --restore-from PATH [options]
+Usage: backup-ha.sh [options]
 
-Restore the Home Assistant integration directory via SFTP from a local backup.
+Download the current Home Assistant integration directory via SFTP into a
+timestamped local backup folder.
 Can be run on Windows using Git Bash.
 
 Options:
@@ -13,7 +14,7 @@ Options:
   -u, --user USER              SSH user (default: root)
   -P, --port PORT              SSH port (default: 22)
   -r, --remote-dir PATH        Remote target directory (default: homeassistant/custom_components/hanchuess)
-      --restore-from PATH      Local backup directory to restore from (required)
+  -b, --backup-root PATH       Local backup root (default: <repo>/.ha-deploy-backups)
   -p, --password PASSWORD      Password for non-interactive mode (requires sshpass)
       --help                   Show this help
 
@@ -21,7 +22,7 @@ Environment:
   HANCHUESS_SFTP_PASSWORD      Alternative to --password (requires sshpass)
 
 Example:
-  bash scripts/restore-ha.sh --host 192.168.0.110 --user root --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000"
+  bash tools/backup-ha.sh --host 192.168.0.110 --user root
 EOF
 }
 
@@ -30,11 +31,14 @@ if ! command -v sftp >/dev/null 2>&1; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 HOST="192.168.0.110"
 USER="root"
 PORT="22"
 REMOTE_DIR="homeassistant/custom_components/hanchuess"
-RESTORE_FROM=""
+BACKUP_ROOT="$REPO_ROOT/.ha-deploy-backups"
 PASSWORD="${HANCHUESS_SFTP_PASSWORD:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -55,8 +59,8 @@ while [[ $# -gt 0 ]]; do
       REMOTE_DIR="$2"
       shift 2
       ;;
-    --restore-from)
-      RESTORE_FROM="$2"
+    -b|--backup-root)
+      BACKUP_ROOT="$2"
       shift 2
       ;;
     -p|--password)
@@ -75,43 +79,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$RESTORE_FROM" ]]; then
-  echo "Error: --restore-from is required." >&2
-  usage >&2
-  exit 1
-fi
-
-if [[ ! -d "$RESTORE_FROM" ]]; then
-  echo "Error: restore directory does not exist: $RESTORE_FROM" >&2
-  exit 1
-fi
-
 REMOTE_DIR_SFTP="${REMOTE_DIR//\\//}"
 REMOTE_DIR_NAME="${REMOTE_DIR_SFTP##*/}"
+REMOTE_DIR_PARENT="${REMOTE_DIR_SFTP%/*}"
+if [[ "$REMOTE_DIR_PARENT" == "$REMOTE_DIR_SFTP" ]]; then
+  REMOTE_DIR_PARENT="."
+fi
 
-resolve_restore_source() {
-  local restore_from="$1"
-  local nested="$restore_from/$REMOTE_DIR_NAME"
-  if [[ -d "$nested" ]]; then
-    (cd "$nested" && pwd)
-  else
-    (cd "$restore_from" && pwd)
-  fi
-}
-
-RESTORE_SOURCE_SFTP="$(resolve_restore_source "$RESTORE_FROM")"
+mkdir -p "$BACKUP_ROOT"
+BACKUP_ROOT_SFTP="$(cd "$BACKUP_ROOT" && pwd)"
 
 BATCH_FILE="$(mktemp)"
 cleanup() {
   rm -f "$BATCH_FILE"
 }
 trap cleanup EXIT
-
-cat > "$BATCH_FILE" <<EOF
-lcd "$RESTORE_SOURCE_SFTP"
-cd "$REMOTE_DIR_SFTP"
-put -r *
-EOF
 
 run_sftp_batch() {
   local batch_file="$1"
@@ -129,6 +111,16 @@ run_sftp_batch() {
   fi
 }
 
-echo "Restoring remote directory from: $RESTORE_SOURCE_SFTP"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+BACKUP_DIR="$BACKUP_ROOT_SFTP/$STAMP"
+mkdir -p "$BACKUP_DIR"
+
+cat > "$BATCH_FILE" <<EOF
+lcd "$BACKUP_DIR"
+cd "$REMOTE_DIR_PARENT"
+get -r "$REMOTE_DIR_NAME"
+EOF
+
+echo "Creating remote backup in: $BACKUP_DIR"
 run_sftp_batch "$BATCH_FILE"
 

@@ -23,9 +23,9 @@ Environment:
   HANCHUESS_SFTP_PASSWORD      Alternative to --password (requires sshpass)
 
 Examples:
-  bash scripts/deploy-ha.sh --host 192.168.0.110 --user root
-  bash scripts/deploy-ha.sh --host 192.168.0.110 --user root --password "your_password"
-  bash scripts/deploy-ha.sh --host 192.168.0.110 --user root --local-dir "/c/Projects/hanchu-ess-ha/custom_components/hanchuess" --remote-dir "homeassistant/custom_components/hanchuess"
+  bash tools/deploy-ha.sh --host 192.168.0.110 --user root
+  bash tools/deploy-ha.sh --host 192.168.0.110 --user root --password "your_password"
+  bash tools/deploy-ha.sh --host 192.168.0.110 --user root --local-dir "/c/Projects/hanchu-ess-ha/custom_components/hanchuess" --remote-dir "homeassistant/custom_components/hanchuess"
 EOF
 }
 
