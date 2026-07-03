@@ -266,3 +266,27 @@ doesn't match the tag (step 3), a manifest/tag version mismatch (steps 2 and 5),
 or a tag placed on a commit that isn't on `main` (step 5 — the workflow rejects
 it). Fix the cause on `main`, delete and re-push the tag
 (`git push origin :v1.2.7` then re-tag), and the workflow will run again.
+
+
+## Quick deploy to test Home Assistant (Git Bash)
+
+For repeat local testing, use:
+
+```bash
+bash scripts/deploy-ha.sh
+```
+
+Defaults match a typical local setup (`root@192.168.0.110`, uploading
+`custom_components/hanchuess` to `homeassistant/custom_components/hanchuess`).
+Override with flags when needed:
+
+```bash
+bash scripts/deploy-ha.sh \
+  --host 192.168.0.110 \
+  --user root \
+  --local-dir "/c/Users/lance/IdeaProjects/hanchu-ess-ha/custom_components/hanchuess" \
+  --remote-dir "homeassistant/custom_components/hanchuess"
+```
+
+Authentication prompts normally at runtime. For non-interactive runs, set
+`HANCHUESS_SFTP_PASSWORD` or pass `--password` (requires `sshpass`).
