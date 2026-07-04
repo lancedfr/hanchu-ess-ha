@@ -10,6 +10,8 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-07-04
+
 ### Added
 - Four directional power sensors derived from signed realtime power values:
   Battery Charge Power, Battery Discharge Power, Grid Import Power, and Grid
