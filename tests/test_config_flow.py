@@ -47,6 +47,9 @@ def _patched_client(token="tok", devices=None):
     instance.async_get_devices = AsyncMock(
         return_value=devices if devices is not None else []
     )
+    instance.async_get_device_status = AsyncMock(
+        return_value={"stationId": "ST2503268043IE"}
+    )
     return patcher, instance
 
 
@@ -80,6 +83,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant):
         assert result3["data"]["sn"] == "SN1"
         assert result3["data"]["dev_type"] == "2"
         assert result3["data"]["token"] == "tok"
+        assert result3["data"]["stationId"] == "ST2503268043IE"
     finally:
         patcher.stop()
 
@@ -149,6 +153,22 @@ async def test_reauth_flow_success(hass: HomeAssistant):
         assert entry.data["token"] == "new-tok"
     finally:
         patcher.stop()
+
+
+async def test_import_flow_preserves_station_id(hass: HomeAssistant):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "import"},
+        data={
+            "sn": "SN1",
+            "dev_type": "2",
+            "token": "tok",
+            "stationId": "ST2503268043IE",
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["stationId"] == "ST2503268043IE"
 
 
 async def test_options_flow_sets_options(hass: HomeAssistant):

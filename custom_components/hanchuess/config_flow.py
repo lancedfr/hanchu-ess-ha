@@ -27,6 +27,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self):
         self._token = None
         self._devices = []
+        self._client = None
 
     @staticmethod
     @callback
@@ -40,6 +41,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         shared_client = existing.get("_client")
         if shared_client and shared_client.token:
             self._token = shared_client.token
+            self._client = shared_client
             self._devices = await shared_client.async_get_devices()
             if self._devices:
                 return await self.async_step_select_device()
@@ -52,6 +54,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             if token:
                 self._token = client.token
+                self._client = client
                 self._devices = await client.async_get_devices()
                 if self._devices:
                     return await self.async_step_select_device()
@@ -71,6 +74,20 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_device(self, user_input=None):
         """Step 2: Select devices (multi-select)."""
         errors = {}
+        # Filter inverters and exclude already configured
+        configured_ids = set()
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            configured_ids.add(entry.data.get("sn"))
+
+        available = {
+            d["sn"]: d["sn"]
+            for d in self._devices
+            if d.get("devType") == "2" and d["sn"] not in configured_ids
+        }
+
+        if not available:
+            return self.async_abort(reason="no_devices")
+
         if user_input is not None:
             selected = user_input.get("devices", [])
             if not selected:
@@ -80,6 +97,23 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 inverter_serial_number = selected[0]
                 await self.async_set_unique_id(inverter_serial_number)
                 self._abort_if_unique_id_configured()
+
+                client = self._client or HanchuessApiClient(BASE_URL, token=self._token)
+                self._client = client
+
+                device_status = await client.async_get_device_status(
+                    inverter_serial_number
+                )
+                station_id = device_status.get("stationId")
+                if not station_id:
+                    errors["base"] = "station_lookup_failed"
+                    return self.async_show_form(
+                        step_id="select_device",
+                        data_schema=vol.Schema({
+                            vol.Required("devices"): cv.multi_select(available),
+                        }),
+                        errors=errors,
+                    )
 
                 # Find devType
                 dev_type = "2"
@@ -104,23 +138,10 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "sn": inverter_serial_number,
                         "dev_type": dev_type,
                         "token": self._token,
+                        "stationId": station_id,
                         "pending_devices": pending,
                     },
                 )
-
-        # Filter inverters and exclude already configured
-        configured_ids = set()
-        for entry in self.hass.config_entries.async_entries(DOMAIN):
-            configured_ids.add(entry.data.get("sn"))
-
-        available = {
-            d["sn"]: d["sn"]
-            for d in self._devices
-            if d.get("devType") == "2" and d["sn"] not in configured_ids
-        }
-
-        if not available:
-            return self.async_abort(reason="no_devices")
 
         return self.async_show_form(
             step_id="select_device",
@@ -141,6 +162,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "sn": inverter_serial_number,
                 "dev_type": data.get("dev_type", "2"),
                 "token": data["token"],
+                "stationId": data.get("stationId"),
                 "pending_devices": [],
             },
         )

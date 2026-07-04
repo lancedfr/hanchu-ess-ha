@@ -314,6 +314,9 @@ remote integration directory to a timestamped local backup folder under
 `.ha-deploy-backups/` at the repo root. Override backup location with
 `--backup-root`.
 
+If you want to skip that pre-deploy backup for a one-off deploy, pass
+`--skip-backup` to `tools/deploy-ha.sh`.
+
 Authentication prompts normally at runtime. For non-interactive runs, set
 `HANCHUESS_SFTP_PASSWORD` or pass `--password` (requires `sshpass`).
 

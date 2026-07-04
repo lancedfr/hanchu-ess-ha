@@ -116,6 +116,12 @@ async def test_get_menu(client, inverter_serial_number):
     assert "data" in data
 
 
+async def test_get_device_status_includes_station_id(client, inverter_serial_number):
+    data = await client.async_get_device_status(inverter_serial_number)
+    assert isinstance(data, dict)
+    assert data.get("stationId")
+
+
 async def test_iot_get(client, inverter_serial_number, dev_type):
     keys = [
         "WORK_MODE_CMB",

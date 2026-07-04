@@ -113,9 +113,12 @@ async def test_get_devices_empty_on_unsuccess():
 async def test_get_device_status_success():
     client = HanchuessApiClient(BASE_URL, token="t")
     with aioresponses() as m:
-        m.post(STATUS, payload={"success": True, "data": {"batSoc": 55}})
+        m.post(
+            STATUS,
+            payload={"success": True, "data": {"batSoc": 55, "stationId": "ST2503268043IE"}},
+        )
         data = await client.async_get_device_status("SN1")
-    assert data == {"batSoc": 55}
+    assert data == {"batSoc": 55, "stationId": "ST2503268043IE"}
 
 
 async def test_get_device_status_empty_on_unsuccess():
