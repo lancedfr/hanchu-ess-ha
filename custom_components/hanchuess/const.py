@@ -5,6 +5,10 @@ DOMAIN = "hanchuess"
 PLATFORMS = ["sensor", "number", "switch", "select", "time"]
 BASE_URL = os.environ.get("HANCHUESS_URL", "https://iess3.hanchuess.com")
 
+# AES-CBC key and IV used by the Hanchu gateway's encrypted payloads.
+AES_IV = b"9z64Qr8mZH7Pg8d1"
+AES_SECRET_KEY = b"9z64Qr8mZH7Pg8d1"
+
 # Options flow keys + defaults
 CONF_REALTIME_INTERVAL = "realtime_interval"
 CONF_STATISTICS_INTERVAL = "statistics_interval"

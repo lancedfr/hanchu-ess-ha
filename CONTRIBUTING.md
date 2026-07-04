@@ -110,6 +110,27 @@ pytest -s                                       # show print()/log output
 On Windows, `pytest -rs` is a quick way to confirm the config-flow tests skipped
 for the expected reason rather than erroring.
 
+### Crypto debug utility
+
+For local AES payload debugging, use the CLI helper in `tools/crypto_tool.py`.
+It uses the integration's default key/IV unless you override them.
+
+```bash
+py tools/crypto_tool.py encrypt '{"sn":"SN123456","devType":"2"}'
+py tools/crypto_tool.py decrypt 'BASE64_CIPHERTEXT'
+py tools/crypto_tool.py decrypt --pretty 'BASE64_CIPHERTEXT'
+```
+
+You can also pipe JSON or ciphertext through stdin:
+
+```powershell
+Get-Content payload.json | py tools/crypto_tool.py encrypt
+Get-Content cipher.txt | py tools/crypto_tool.py decrypt --pretty
+```
+
+Optional `--key-text` and `--iv-text` overrides are available when you need to
+test non-default material.
+
 ### Running the live integration test
 
 ```bash
@@ -340,4 +361,3 @@ To push automatically from the script, pass:
 ```bash
 bash tools/release.sh --version X.Y.Z --update-changelog true --auto-push true
 ```
-
