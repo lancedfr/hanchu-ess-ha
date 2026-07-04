@@ -511,7 +511,7 @@ This is useful when reporting issues — you can share the diagnostics file with
 
 ## Credits
 Based on the original work by guoxiatech.
-API reverse engineering and extended entity support by upton68.
+API reverse engineering and extended entity support by upton68 & further improvement contributions by lancedfr.
 
 ## Custom Lovelace Card
 The integration auto-registers a custom card **Hanchuess Remote Settings** which
