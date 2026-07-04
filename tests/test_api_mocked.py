@@ -12,10 +12,12 @@ from aioresponses import aioresponses
 
 from custom_components.hanchuess.api import HanchuessApiClient, ReauthRequired
 from custom_components.hanchuess.const import BASE_URL
+from custom_components.hanchuess.crypto import _decrypt_payload
 
 LOGIN = f"{BASE_URL}/gateway/identify/auth/token"
 REFRESH = f"{BASE_URL}/gateway/identify/auth/token/refresh"
 DEVICE_LIST = f"{BASE_URL}/gateway/app/ha/getDeviceList"
+STATION_DETAIL = f"{BASE_URL}/gateway/platform/station/detail"
 STATUS = f"{BASE_URL}/gateway/app/ha/getDeviceStatus"
 STATISTICS = f"{BASE_URL}/gateway/app/ha/getDeviceStatistics"
 MENU = f"{BASE_URL}/gateway/app/ha/menu"
@@ -104,6 +106,49 @@ async def test_get_devices_empty_on_unsuccess():
         m.post(DEVICE_LIST, payload={"success": False})
         devices = await client.async_get_devices()
     assert devices == []
+
+
+# ---------------------------------------------------------------------------
+# Station detail
+# ---------------------------------------------------------------------------
+
+async def test_get_station_detail_success(monkeypatch):
+    client = HanchuessApiClient(BASE_URL, token="t")
+
+    class _Response:
+        status = 200
+
+        async def json(self, content_type=None):
+            return {"success": True, "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]}}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _Session:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, **kwargs):
+            assert url == STATION_DETAIL
+            assert kwargs["headers"]["appPlat"] == "ha"
+            assert kwargs["headers"]["access-token"] == "t"
+            assert "Content-Type" not in kwargs["headers"]
+            assert _decrypt_payload(kwargs["data"]) == {"stationId": "ST2503268043IE"}
+            return _Response()
+
+    monkeypatch.setattr(aiohttp, "ClientSession", _Session)
+
+    data = await client.async_get_station_detail("ST2503268043IE")
+    assert data == {"success": True, "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]}}
 
 
 # ---------------------------------------------------------------------------

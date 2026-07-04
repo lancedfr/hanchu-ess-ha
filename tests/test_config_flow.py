@@ -50,6 +50,17 @@ def _patched_client(token="tok", devices=None):
     instance.async_get_device_status = AsyncMock(
         return_value={"stationId": "ST2503268043IE"}
     )
+    instance.async_get_station_detail = AsyncMock(
+        return_value={
+            "code": 200,
+            "data": {
+                "bmsList": [
+                    {"sn": "B007EN5811054"},
+                    {"sn": "B002MU4810030"},
+                ]
+            },
+        }
+    )
     return patcher, instance
 
 
@@ -84,6 +95,10 @@ async def test_user_flow_creates_entry(hass: HomeAssistant):
         assert result3["data"]["dev_type"] == "2"
         assert result3["data"]["token"] == "tok"
         assert result3["data"]["stationId"] == "ST2503268043IE"
+        assert result3["data"]["battery_serials"] == [
+            "B007EN5811054",
+            "B002MU4810030",
+        ]
     finally:
         patcher.stop()
 
@@ -164,11 +179,16 @@ async def test_import_flow_preserves_station_id(hass: HomeAssistant):
             "dev_type": "2",
             "token": "tok",
             "stationId": "ST2503268043IE",
+            "battery_serials": ["B007EN5811054", "B002MU4810030"],
         },
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["stationId"] == "ST2503268043IE"
+    assert result["data"]["battery_serials"] == [
+        "B007EN5811054",
+        "B002MU4810030",
+    ]
 
 
 async def test_options_flow_sets_options(hass: HomeAssistant):

@@ -115,6 +115,22 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         errors=errors,
                     )
 
+                station_detail = await client.async_get_station_detail(station_id)
+                if not station_detail:
+                    errors["base"] = "battery_lookup_failed"
+                    return self.async_show_form(
+                        step_id="select_device",
+                        data_schema=vol.Schema({
+                            vol.Required("devices"): cv.multi_select(available),
+                        }),
+                        errors=errors,
+                    )
+                battery_serials = [
+                    item.get("sn")
+                    for item in station_detail.get("data", {}).get("bmsList", [])
+                    if item.get("sn")
+                ]
+
                 # Find devType
                 dev_type = "2"
                 for d in self._devices:
@@ -139,6 +155,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "dev_type": dev_type,
                         "token": self._token,
                         "stationId": station_id,
+                        "battery_serials": battery_serials,
                         "pending_devices": pending,
                     },
                 )
@@ -163,6 +180,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "dev_type": data.get("dev_type", "2"),
                 "token": data["token"],
                 "stationId": data.get("stationId"),
+                "battery_serials": data.get("battery_serials", []),
                 "pending_devices": [],
             },
         )

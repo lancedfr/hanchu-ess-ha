@@ -331,6 +331,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "dev_type": item.get("devType", "2"),
                     "token": entry.data["token"],
                     "stationId": entry.data.get("stationId"),
+                    "battery_serials": entry.data.get("battery_serials", []),
                 },
             )
         new_data = {k: v for k, v in entry.data.items() if k != "pending_devices"}

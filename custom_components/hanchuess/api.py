@@ -5,6 +5,8 @@ import time
 import aiohttp
 import async_timeout
 
+from .crypto import _encrypt_payload
+
 _LOGGER = logging.getLogger(__name__)
 
 TOKEN_REFRESH_DAYS = 25
@@ -127,6 +129,40 @@ class HanchuessApiClient:
             return devices
         _LOGGER.info("[HANCHUESS] getDeviceList: 0 devices")
         return []
+
+    async def async_get_station_detail(self, station_id: str) -> dict:
+        url = f"{self._domain}/gateway/platform/station/detail"
+        payload = _encrypt_payload({"stationId": station_id})
+        headers = {"appPlat": "ha"}
+        if self._token:
+            headers["access-token"] = self._token
+
+        _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
+        try:
+            async with async_timeout.timeout(10):
+                async with aiohttp.ClientSession(
+                    connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                ) as session:
+                    async with session.post(
+                        url,
+                        data=payload,
+                        headers=headers,
+                    ) as response:
+                        result = await response.json(content_type=None)
+                        _LOGGER.debug(
+                            "[HANCHUESS] response: %s status=%s body=%s",
+                            "/gateway/platform/station/detail",
+                            response.status,
+                            str(result)[:500],
+                        )
+                        if response.status == 401:
+                            return {"success": False, "code": 401}
+                        return result if response.status == 200 else {}
+        except TimeoutError:
+            _LOGGER.warning("[HANCHUESS] Station detail request timed out: %s", url)
+        except Exception as err:
+            _LOGGER.warning("[HANCHUESS] Station detail request failed: %s - %s", url, err)
+        return {}
 
     async def async_get_device_status(self, sn: str, language: str = "en") -> dict | None:
         result = await self._request(

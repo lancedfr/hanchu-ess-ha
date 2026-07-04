@@ -122,6 +122,17 @@ async def test_get_device_status_includes_station_id(client, inverter_serial_num
     assert data.get("stationId")
 
 
+async def test_get_station_detail_returns_bms_list(client, inverter_serial_number):
+    device_status = await client.async_get_device_status(inverter_serial_number)
+    station_id = device_status.get("stationId")
+    assert station_id, "Expected getDeviceStatus to return stationId"
+
+    data = await client.async_get_station_detail(station_id)
+    assert isinstance(data, dict)
+    assert data.get("success") is True
+    assert isinstance(data.get("data", {}).get("bmsList"), list)
+
+
 async def test_iot_get(client, inverter_serial_number, dev_type):
     keys = [
         "WORK_MODE_CMB",
