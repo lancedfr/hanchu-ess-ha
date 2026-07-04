@@ -34,6 +34,26 @@ SENSORS = {
         "auto_watt": True,
         "unit_key": "batPUnit",
     },
+    "battery_charge_power": {
+        "key": "batP",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.WATT,
+        "icon": "mdi:battery-plus",
+        "auto_watt": True,
+        "unit_key": "batPUnit",
+        "derive_mode": "positive",
+    },
+    "battery_discharge_power": {
+        "key": "batP",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.WATT,
+        "icon": "mdi:battery-minus",
+        "auto_watt": True,
+        "unit_key": "batPUnit",
+        "derive_mode": "negative_as_positive",
+    },
     "fast_charge_time_remaining": {
         "key": "testTimeRemain",
         "name": "Fast Charge Time Remaining",
@@ -58,6 +78,26 @@ SENSORS = {
         "icon": "mdi:transmission-tower",
         "auto_watt": True,
         "unit_key": "meterPPwrUnit",
+    },
+    "grid_import_power": {
+        "key": "meterPPwr",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.WATT,
+        "icon": "mdi:transmission-tower-import",
+        "auto_watt": True,
+        "unit_key": "meterPPwrUnit",
+        "derive_mode": "positive",
+    },
+    "grid_export_power": {
+        "key": "meterPPwr",
+        "device_class": SensorDeviceClass.POWER,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfPower.WATT,
+        "icon": "mdi:transmission-tower-export",
+        "auto_watt": True,
+        "unit_key": "meterPPwrUnit",
+        "derive_mode": "negative_as_positive",
     },
     "load_power": {
         "key": "loadPwr",
@@ -285,6 +325,21 @@ def _parse_energy_menu(menu_data: dict) -> dict:
     return result
 
 
+def _derive_directional_power(value, mode):
+    """Derive positive-directional power values from a signed source."""
+    try:
+        v = float(value)
+    except (ValueError, TypeError):
+        return None
+    if mode == "positive":
+        result = round(max(v, 0), 1)
+    elif mode == "negative_as_positive":
+        result = round(max(-v, 0), 1)
+    else:
+        result = round(v, 1)
+    return 0.0 if result == 0 else result
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
@@ -346,12 +401,17 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
             return None
         if self._config.get("auto_watt"):
             unit = self.coordinator.data.get(self._config.get("unit_key"))
-            return _scale_auto_watt(value, unit)
+            value = _scale_auto_watt(value, unit)
+            if value is None:
+                return None
         if "scale" in self._config:
             try:
-                return round(float(value) * self._config["scale"], 1)
+                value = round(float(value) * self._config["scale"], 1)
             except (ValueError, TypeError):
                 return None
+        derive_mode = self._config.get("derive_mode")
+        if derive_mode:
+            return _derive_directional_power(value, derive_mode)
         return value
 
 

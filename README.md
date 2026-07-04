@@ -9,13 +9,21 @@ This fork extends the original guoxiatech/hanchu-ess-ha integration — publishe
 ### Sensors
 - Battery SOC (%)
 - Battery Power (W) — signed (positive = charge, negative = discharge)
+- Battery Charge Power (W) — charge only derived power
+- Battery Discharge Power (W) — discharge only derived power
 - Battery Capacity (kWh)
 - Grid Power (W) — signed (positive = import, negative = export)
+- Grid Import Power (W) — import only derived power
+- Grid Export Power (W) — export only derived power
 - Load Power (W)
 - PV Power (W)
+- AC-Coupled PV Power (W)
+- DG Power (W) — only available when generator support is present
+- Fast Charge Time Remaining (s)
 - Daily Charge/Discharge Energy (kWh)
 - Daily Grid Import/Export (kWh)
 - Daily Load/PV Energy (kWh)
+- Daily DG Energy (kWh) — only available when generator support is present
 - Device Status (online/offline/pending)
 
 ### Controls (fully automatable)

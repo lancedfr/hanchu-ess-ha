@@ -11,3 +11,4 @@ venv/
 .idea/
 custom_components/hanchuess/www/hanchuess-energy-card.js.backup
 test_time_picker.html
+.ha-deploy-backups/

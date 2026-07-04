@@ -10,6 +10,15 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+### Added
+- Four directional power sensors derived from signed realtime power values:
+  Battery Charge Power, Battery Discharge Power, Grid Import Power, and Grid
+  Export Power (all reported as positive-only watts).
+
+### Fixed
+- Directional derived power sensors now canonicalize zero so they never display
+  a negative zero value (`-0 W`); zero flow is always shown as `0 W`.
+
 ## [1.2.11] - 2026-07-01
 
 ### Fixed
