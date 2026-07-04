@@ -9,6 +9,7 @@ Entries up to and including 1.2.9 are summarised from the git history and tags;
 later versions are tracked here going forward.
 
 ## [Unreleased]
+ 
 
 ## [1.2.12] - 2026-07-04
 
