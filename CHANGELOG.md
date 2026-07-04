@@ -120,7 +120,8 @@ later versions are tracked here going forward.
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.11...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.12...HEAD
+[1.2.12]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.9...v1.2.10
 [1.2.9]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.8...v1.2.9
