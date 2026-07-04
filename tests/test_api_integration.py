@@ -46,7 +46,7 @@ async def client():
 
 
 @pytest.fixture(scope="module")
-def sn():
+def inverter_serial_number():
     value = os.environ.get("HANCHUESS_SN")
     if not value:
         pytest.skip("HANCHUESS_SN not set — skipping device-specific test")
@@ -98,25 +98,25 @@ async def test_get_devices(client):
 # Device-specific read tests (require HANCHUESS_SN)
 # ---------------------------------------------------------------------------
 
-async def test_get_device_status(client, sn):
-    data = await client.async_get_device_status(sn)
+async def test_get_device_status(client, inverter_serial_number):
+    data = await client.async_get_device_status(inverter_serial_number)
     assert isinstance(data, dict)
     assert "_token_expired" not in data
 
 
-async def test_get_device_statistics(client, sn):
-    data = await client.async_get_device_statistics(sn)
+async def test_get_device_statistics(client, inverter_serial_number):
+    data = await client.async_get_device_statistics(inverter_serial_number)
     assert isinstance(data, dict)
     assert "_token_expired" not in data
 
 
-async def test_get_menu(client, sn):
-    data = await client.async_get_menu(sn)
+async def test_get_menu(client, inverter_serial_number):
+    data = await client.async_get_menu(inverter_serial_number)
     assert isinstance(data, dict)
     assert "data" in data
 
 
-async def test_iot_get(client, sn, dev_type):
+async def test_iot_get(client, inverter_serial_number, dev_type):
     keys = [
         "WORK_MODE_CMB",
         "CHG_PWR_LMT",
@@ -124,7 +124,7 @@ async def test_iot_get(client, sn, dev_type):
         "CHG_BAT_SOC_LMT",
         "DSCHG_BAT_SOC_LMT",
     ]
-    data = await client.async_iot_get(sn, dev_type, keys)
+    data = await client.async_iot_get(inverter_serial_number, dev_type, keys)
     assert isinstance(data, dict)
     # At least one of the known keys should be present
     assert any(k in data for k in keys), f"None of {keys} found in iotGet response: {data}"
@@ -134,17 +134,21 @@ async def test_iot_get(client, sn, dev_type):
 # Write-path tests (require HANCHUESS_SN + HANCHUESS_ALLOW_WRITE=1)
 # ---------------------------------------------------------------------------
 
-async def test_device_control_no_op(client, sn, dev_type, allow_write):
+async def test_device_control_no_op(client, inverter_serial_number, dev_type, allow_write):
     """Read current work mode then write the same value back — net effect is zero."""
-    current = await client.async_iot_get(sn, dev_type, ["WORK_MODE_CMB"])
+    current = await client.async_iot_get(inverter_serial_number, dev_type, ["WORK_MODE_CMB"])
     work_mode = current.get("WORK_MODE_CMB")
     assert work_mode is not None, "Could not read WORK_MODE_CMB for no-op write"
 
-    result = await client.async_device_control(sn, dev_type, {"WORK_MODE_CMB": work_mode})
+    result = await client.async_device_control(
+        inverter_serial_number, dev_type, {"WORK_MODE_CMB": work_mode}
+    )
     assert result.get("success"), f"device_control failed: {result.get('msg')}"
 
 
-async def test_fast_charge_stop_is_noop(client, sn, allow_write):
+async def test_fast_charge_stop_is_noop(client, inverter_serial_number, allow_write):
     """Sending stop-fast-charge (act=-2) is safe even when fast charge isn't running."""
-    result = await client.async_fast_charge_discharge(sn, act=-2, duration=0)
+    result = await client.async_fast_charge_discharge(
+        inverter_serial_number, act=-2, duration=0
+    )
     assert result.get("success"), f"fast_charge_discharge stop failed: {result.get('msg')}"

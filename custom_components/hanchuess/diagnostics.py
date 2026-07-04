@@ -20,7 +20,10 @@ async def async_get_config_entry_diagnostics(
     diag: dict[str, Any] = {
         "entry": async_redact_data(entry.as_dict(), TO_REDACT),
         "resolved": async_redact_data(
-            {"dev_type": entry.data.get("dev_type"), "sn": entry.data.get("sn")},
+            {
+                "dev_type": entry.data.get("dev_type"),
+                "sn": entry.data.get("sn"),
+            },
             TO_REDACT,
         ),
     }
@@ -52,7 +55,8 @@ async def async_get_device_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a device.
 
-    One config entry maps to exactly one physical device (keyed by ``sn``), so the
-    device diagnostics are the same as the config-entry diagnostics.
+    One config entry maps to exactly one physical device (keyed by the stored
+    serial-number field), so the device diagnostics are the same as the
+    config-entry diagnostics.
     """
     return await async_get_config_entry_diagnostics(hass, entry)

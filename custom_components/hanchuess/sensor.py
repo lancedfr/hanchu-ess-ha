@@ -370,7 +370,8 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         self._entry = entry
         self._sensor_key = sensor_key
         self._config = config
-        self._attr_unique_id = f"{entry.data['sn']}_{sensor_key}"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_{sensor_key}"
         self._attr_icon = config.get("icon")
         if "name" in config:
             self._attr_name = config["name"]
@@ -387,9 +388,10 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
@@ -423,16 +425,18 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_unique_id = f"{entry.data['sn']}_device_status"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_device_status"
         self._work_mode_options = []
         self._energy_fields = []
         self._menu_loaded = False
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
@@ -451,8 +455,9 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         fast_chg = self.coordinator.data.get("deviceStatusOfTestFastChg")
         remain = self.coordinator.data.get("testTimeRemain")
+        inverter_serial_number = self._entry.data["sn"]
         attrs = {
-            "sn": self._entry.data["sn"],
+            "sn": inverter_serial_number,
             "energy_fields": self._energy_fields,
             "work_mode_options": self._work_mode_options,
         }
@@ -473,8 +478,10 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
 
     async def _refresh_menu(self) -> None:
         language = self.hass.config.language or "en"
-        sn = self._entry.data["sn"]
-        menu_data = await self.coordinator.client.async_get_menu(sn, language)
+        inverter_serial_number = self._entry.data["sn"]
+        menu_data = await self.coordinator.client.async_get_menu(
+            inverter_serial_number, language
+        )
         parsed = _parse_energy_menu(menu_data)
         if parsed["work_mode_options"]:
             self._work_mode_options = parsed["work_mode_options"]

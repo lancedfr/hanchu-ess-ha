@@ -147,14 +147,14 @@ class HanchuessEnergyCardEditor extends HTMLElement {
     this.querySelector("#entity_select").addEventListener("change", (e) => {
       const entityId = e.target.value;
       const state = this._hass.states[entityId];
-      let sn = "";
-      if (state && state.attributes) sn = state.attributes.sn || "";
-      if (!sn) {
+      let inverterSerialNumber = "";
+      if (state && state.attributes) inverterSerialNumber = state.attributes.sn || "";
+      if (!inverterSerialNumber) {
         const m = entityId.match(/hanchuess_(.+?)_device_status/);
-        if (m) sn = m[1].toUpperCase();
+        if (m) inverterSerialNumber = m[1].toUpperCase();
       }
 
-      this._config = { ...this._config, entity: entityId, sn: sn };
+      this._config = { ...this._config, entity: entityId, sn: inverterSerialNumber };
       this.dispatchEvent(new CustomEvent("config-changed", {
         detail: { config: this._config },
         bubbles: true,
@@ -196,12 +196,12 @@ class HanchuessEnergyCard extends HTMLElement {
     const entity = Object.keys(hass.states)
       .find(eid => eid.startsWith("sensor.") && eid.includes("device_status") && eid.includes("hanchuess")) || "";
     const state = hass.states[entity];
-    let sn = state && state.attributes ? (state.attributes.sn || "") : "";
-    if (!sn) {
+    let inverterSerialNumber = state && state.attributes ? (state.attributes.sn || "") : "";
+    if (!inverterSerialNumber) {
       const m = entity.match(/hanchuess_(.+?)_device_status/);
-      if (m) sn = m[1].toUpperCase();
+      if (m) inverterSerialNumber = m[1].toUpperCase();
     }
-    return { entity, sn };
+    return { entity, sn: inverterSerialNumber };
   }
 
   _render() {
@@ -1291,7 +1291,7 @@ class HanchuessEnergyCard extends HTMLElement {
     const state = this._hass.states[this._config.entity];
     if (!state) return;
 
-    const sn = this._config.sn;
+    const inverterSerialNumber = this._config.sn;
     const valueMap = {};
 
     // Check charging/discharging time overlap before submitting

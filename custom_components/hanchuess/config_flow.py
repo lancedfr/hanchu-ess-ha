@@ -77,31 +77,31 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "no_devices"
             else:
                 # Create entry for the first device
-                sn = selected[0]
-                await self.async_set_unique_id(sn)
+                inverter_serial_number = selected[0]
+                await self.async_set_unique_id(inverter_serial_number)
                 self._abort_if_unique_id_configured()
 
                 # Find devType
                 dev_type = "2"
                 for d in self._devices:
-                    if d["sn"] == sn:
+                    if d["sn"] == inverter_serial_number:
                         dev_type = d.get("devType", "2")
                         break
 
                 # Build pending devices with devType
                 pending = []
-                for p_sn in selected[1:]:
+                for pending_inverter_serial_number in selected[1:]:
                     p_type = "2"
                     for d in self._devices:
-                        if d["sn"] == p_sn:
+                        if d["sn"] == pending_inverter_serial_number:
                             p_type = d.get("devType", "2")
                             break
-                    pending.append({"sn": p_sn, "devType": p_type})
+                    pending.append({"sn": pending_inverter_serial_number, "devType": p_type})
 
                 return self.async_create_entry(
-                    title=f"Hanchuess {sn}",
+                    title=f"Hanchuess {inverter_serial_number}",
                     data={
-                        "sn": sn,
+                        "sn": inverter_serial_number,
                         "dev_type": dev_type,
                         "token": self._token,
                         "pending_devices": pending,
@@ -132,13 +132,13 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_import(self, data: dict):
         """Handle creation of additional devices from pending list."""
-        sn = data["sn"]
-        await self.async_set_unique_id(sn)
+        inverter_serial_number = data["sn"]
+        await self.async_set_unique_id(inverter_serial_number)
         self._abort_if_unique_id_configured()
         return self.async_create_entry(
-            title=f"Hanchuess {sn}",
+            title=f"Hanchuess {inverter_serial_number}",
             data={
-                "sn": sn,
+                "sn": inverter_serial_number,
                 "dev_type": data.get("dev_type", "2"),
                 "token": data["token"],
                 "pending_devices": [],

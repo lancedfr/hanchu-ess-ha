@@ -55,20 +55,24 @@ class HanchuessRealtimeCoordinator(DataUpdateCoordinator):
         self.client = client
 
     async def _async_update_data(self) -> dict:
-        sn = self.entry.data["sn"]
+        inverter_serial_number = self.entry.data["sn"]
         language = self.hass.config.language or "en"
 
         # Proactive refresh at 25 days
         if self.client.should_refresh_token():
             await _try_refresh(self.client, self._update_entry_token)
 
-        data = await self.client.async_get_device_status(sn, language)
+        data = await self.client.async_get_device_status(
+            inverter_serial_number, language
+        )
 
         # Reactive refresh on 401
         if data and data.get("_token_expired"):
             refreshed = await _try_refresh(self.client, self._update_entry_token, force=True)
             if refreshed:
-                data = await self.client.async_get_device_status(sn, language)
+                data = await self.client.async_get_device_status(
+                    inverter_serial_number, language
+                )
 
         if data and data.get("_token_expired"):
             _raise_auth_failed(self.client, "Token expired and refresh failed")
@@ -102,15 +106,19 @@ class HanchuessStatisticsCoordinator(DataUpdateCoordinator):
         self.client = client
 
     async def _async_update_data(self) -> dict:
-        sn = self.entry.data["sn"]
+        inverter_serial_number = self.entry.data["sn"]
         language = self.hass.config.language or "en"
 
-        data = await self.client.async_get_device_statistics(sn, language)
+        data = await self.client.async_get_device_statistics(
+            inverter_serial_number, language
+        )
 
         if data and data.get("_token_expired"):
             refreshed = await _try_refresh(self.client, self._update_entry_token, force=True)
             if refreshed:
-                data = await self.client.async_get_device_statistics(sn, language)
+                data = await self.client.async_get_device_statistics(
+                    inverter_serial_number, language
+                )
 
         if data and data.get("_token_expired"):
             _raise_auth_failed(self.client, "Token expired and refresh failed")

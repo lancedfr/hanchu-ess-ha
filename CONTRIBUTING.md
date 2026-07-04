@@ -313,3 +313,31 @@ bash tools/restore-ha.sh \
   --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000"
 ```
 
+## Automated release script for maintainers with permission only (Git Bash)
+
+You can run the release flow with:
+
+```bash
+bash tools/release.sh --version X.Y.Z --update-changelog true
+```
+
+This script automates steps 2–5 above:
+
+- bumps `custom_components/hanchuess/manifest.json` to `X.Y.Z`,
+- optionally updates `CHANGELOG.md` when `--update-changelog true`,
+- creates `Release vX.Y.Z` commit and local `vX.Y.Z` tag.
+
+By default it **does not push** to remote; it prints explicit push commands so
+you can confirm before triggering the release workflow:
+
+```bash
+git push origin main
+git push origin vX.Y.Z
+```
+
+To push automatically from the script, pass:
+
+```bash
+bash tools/release.sh --version X.Y.Z --update-changelog true --auto-push true
+```
+

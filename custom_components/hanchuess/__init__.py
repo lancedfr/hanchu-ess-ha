@@ -55,19 +55,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 })
 @websocket_api.async_response
 async def ws_iot_get(hass, connection, msg):
-    sn = msg["sn"]
+    inverter_serial_number = msg["sn"]
     dev_type = msg["dev_type"]
     keys = msg["keys"]
     target_client = None
     for eid, data in hass.data[DOMAIN].items():
         if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == sn:
+            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                 target_client = data["realtime"].client
                 break
     if not target_client:
-        connection.send_error(msg["id"], "not_found", f"Device {sn} not found")
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
         return
-    result = await target_client.async_iot_get(sn, dev_type, keys)
+    result = await target_client.async_iot_get(inverter_serial_number, dev_type, keys)
     connection.send_result(msg["id"], result)
 
 
@@ -79,7 +81,7 @@ async def ws_iot_get(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_iot_set(hass, connection, msg):
-    sn = msg["sn"]
+    inverter_serial_number = msg["sn"]
     dev_type = msg["dev_type"]
     value = msg["value"]
     for k, v in value.items():
@@ -91,13 +93,17 @@ async def ws_iot_set(hass, connection, msg):
     target_client = None
     for eid, data in hass.data[DOMAIN].items():
         if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == sn:
+            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                 target_client = data["realtime"].client
                 break
     if not target_client:
-        connection.send_error(msg["id"], "not_found", f"Device {sn} not found")
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
         return
-    result = await target_client.async_device_control(sn, dev_type, value)
+    result = await target_client.async_device_control(
+        inverter_serial_number, dev_type, value
+    )
     if result.get("success"):
         connection.send_result(msg["id"], result.get("data", {}))
     else:
@@ -112,17 +118,21 @@ async def ws_iot_set(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_fast_charge(hass, connection, msg):
-    sn = msg["sn"]
+    inverter_serial_number = msg["sn"]
     target_client = None
     for eid, data in hass.data[DOMAIN].items():
         if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == sn:
+            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                 target_client = data["realtime"].client
                 break
     if not target_client:
-        connection.send_error(msg["id"], "not_found", f"Device {sn} not found")
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
         return
-    result = await target_client.async_fast_charge_discharge(sn, msg["act"], msg["duration"])
+    result = await target_client.async_fast_charge_discharge(
+        inverter_serial_number, msg["act"], msg["duration"]
+    )
     if result.get("success"):
         connection.send_result(msg["id"], result.get("data", {}))
     else:
@@ -163,7 +173,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Fetch menu to get device-specific min/max values for number entities
     language = hass.config.language or "en"
-    sn = entry.data["sn"]
+    inverter_serial_number = entry.data["sn"]
     number_limits = {
         "CHG_PWR_LMT": {"min": 0, "max": 5000},
         "DSCHG_PWR_LMT": {"min": 0, "max": 5000},
@@ -172,7 +182,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "DTU_AC_CHG_SOC_LMT": {"min": 20, "max": 100},
     }
     try:
-        menu_data = await client.async_get_menu(sn, language)
+        menu_data = await client.async_get_menu(inverter_serial_number, language)
         energy = menu_data.get("data", {}).get("energy", {})
         for group in energy.get("items", []):
             for item in group:
@@ -195,7 +205,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         startup_values = await asyncio.wait_for(
             client.async_iot_get(
-                sn,
+                inverter_serial_number,
                 "2",
                 [
                     "WORK_MODE_CMB",
@@ -230,20 +240,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     async def handle_device_control(call: ServiceCall):
-        sn = call.data["sn"]
+        inverter_serial_number = call.data["sn"]
         dev_type = call.data["dev_type"]
         value = call.data["value"]
-        _LOGGER.info("[HANCHUESS] service device_control: %s %s", sn, value)
+        _LOGGER.info(
+            "[HANCHUESS] service device_control: %s %s",
+            inverter_serial_number,
+            value,
+        )
         target_client = None
         for eid, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and "realtime" in data:
-                if data["realtime"].entry.data.get("sn") == sn:
+                if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                     target_client = data["realtime"].client
                     break
         if not target_client:
-            _LOGGER.error("[HANCHUESS] device_control: device %s not found", sn)
+            _LOGGER.error(
+                "[HANCHUESS] device_control: device %s not found",
+                inverter_serial_number,
+            )
             return
-        result = await target_client.async_device_control(sn, dev_type, value)
+        result = await target_client.async_device_control(
+            inverter_serial_number, dev_type, value
+        )
         if not result.get("success"):
             _LOGGER.error("[HANCHUESS] device_control failed: %s", result.get("msg"))
 
@@ -253,15 +272,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     async def handle_fast_charge(call: ServiceCall):
-        sn = call.data.get("sn")
+        inverter_serial_number = call.data.get("sn")
 
-        if not sn:
+        if not inverter_serial_number:
             for eid, data in hass.data[DOMAIN].items():
                 if isinstance(data, dict) and "realtime" in data:
-                    sn = data["realtime"].entry.data.get("sn")
+                    inverter_serial_number = data["realtime"].entry.data.get("sn")
                     break
 
-        if not sn:
+        if not inverter_serial_number:
             _LOGGER.error("[HANCHUESS] fast_charge: No inverter serial found")
             return
 
@@ -271,15 +290,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         target_client = None
         for eid, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and "realtime" in data:
-                if data["realtime"].entry.data.get("sn") == sn:
+                if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                     target_client = data["realtime"].client
                     break
 
         if not target_client:
-            _LOGGER.error("[HANCHUESS] fast_charge: device %s not found", sn)
+            _LOGGER.error(
+                "[HANCHUESS] fast_charge: device %s not found",
+                inverter_serial_number,
+            )
             return
 
-        result = await target_client.async_fast_charge_discharge(sn, act, duration)
+        result = await target_client.async_fast_charge_discharge(
+            inverter_serial_number, act, duration
+        )
 
         if not result.get("success"):
             _LOGGER.error("[HANCHUESS] fast_charge failed: %s", result.get("msg"))

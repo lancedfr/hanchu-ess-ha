@@ -23,8 +23,8 @@ from custom_components.hanchuess.time import TIME_SLOTS, HanchuessTimeSlot
 
 
 class _FakeEntry:
-    def __init__(self, sn="SN1"):
-        self.data = {"sn": sn}
+    def __init__(self, inverter_serial_number="SN1"):
+        self.data = {"sn": inverter_serial_number}
 
 
 class _FakeOptionsEntry:
