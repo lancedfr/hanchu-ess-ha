@@ -510,8 +510,9 @@ The report includes system information, integration config, live device state, a
 This is useful when reporting issues — you can share the diagnostics file without exposing credentials.
 
 ## Credits
-Based on the original work by guoxiatech.
-API reverse engineering and extended entity support by upton68 & further improvement contributions by lancedfr.
+Based on the original work by [guoxiatech](https://github.com/guoxiatech/hanchu-ess-ha) (Guoxia Technology / Hanchu, the manufacturer).
+API reverse engineering and extended entity support by upton68.
+Significant ongoing contributions — unit fixes, diagnostics, options flow, release automation, directional power sensors, and battery unit support — by [lancedfr](https://github.com/lancedfr).
 
 ## Custom Lovelace Card
 The integration auto-registers a custom card **Hanchuess Remote Settings** which
