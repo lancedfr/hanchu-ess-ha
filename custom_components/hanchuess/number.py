@@ -115,7 +115,7 @@ class HanchuessNumber(NumberEntity):
         if result.get("success"):
             self._attr_native_value = value
             self.async_write_ha_state()
-            _LOGGER.info("%s set to %s", self._config["name"], value)
+            _LOGGER.info("[HANCHUESS] %s set to %s", self._config["name"], value)
         else:
             _LOGGER.error(
                 "Failed to set %s: %s", self._config["name"], result.get("msg")

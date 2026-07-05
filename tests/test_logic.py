@@ -13,6 +13,10 @@ pytest.importorskip("homeassistant")
 
 from custom_components.hanchuess import time as time_mod
 from custom_components.hanchuess.const import DEFAULT_FAST_CHARGE_DURATION
+from custom_components.hanchuess.battery import (
+    extract_battery_serials,
+    merge_battery_serials,
+)
 from custom_components.hanchuess.sensor import (
     SENSORS,
     HanchueSensor,
@@ -20,11 +24,20 @@ from custom_components.hanchuess.sensor import (
 )
 from custom_components.hanchuess.switch import _fast_charge_duration
 from custom_components.hanchuess.time import TIME_SLOTS, HanchuessTimeSlot
+from custom_components.hanchuess.sensor import BatterySensor, BATTERY_SENSORS
 
 
 class _FakeEntry:
     def __init__(self, inverter_serial_number="SN1"):
-        self.data = {"sn": inverter_serial_number}
+        self.data = {"sn": inverter_serial_number, "stationId": "ST2503268043IE"}
+
+
+class _FakeBatteryCoordinator:
+    def __init__(self, battery_serial_number="B1", data=None):
+        self.data = {
+            battery_serial_number: data
+            or {"tBat1": "23.5", "socPack": "62.9", "vPack": "52.71", "iPack": "-4.14"}
+        }
 
 
 class _FakeOptionsEntry:
@@ -44,6 +57,32 @@ def _make_sensor(config, value, unit=None):
         data[config["unit_key"]] = unit
     coordinator.data = data
     return HanchueSensor(coordinator, _FakeEntry(), "test_sensor", config)
+
+
+def _make_battery_sensor(key, value="23.5", battery_serial_number="B1"):
+    coordinator = _FakeBatteryCoordinator(
+        battery_serial_number, {BATTERY_SENSORS[key]["key"]: value}
+    )
+    return BatterySensor(coordinator, _FakeEntry(), battery_serial_number, key, BATTERY_SENSORS[key])
+
+
+def test_extract_battery_serials_reads_bms_list():
+    station_detail = {
+        "data": {
+            "bmsList": [
+                {"sn": "B1"},
+                {"sn": ""},
+                {"sn": "B2"},
+                {},
+            ]
+        }
+    }
+    assert extract_battery_serials(station_detail) == ["B1", "B2"]
+
+
+def test_merge_battery_serials_keeps_existing_and_adds_new():
+    station_detail = {"data": {"bmsList": [{"sn": "B2"}, {"sn": "B3"}]}}
+    assert merge_battery_serials(["B1", "B2"], station_detail) == ["B1", "B2", "B3"]
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +222,21 @@ def test_auto_watt_missing_value_returns_none():
 def test_scale_factor_applied():
     s = _make_sensor({"key": "batSoc", "scale": 100}, 0.55)
     assert s.native_value == 55.0
+
+
+def test_battery_temperature_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_temperature_1", "23.5")
+    assert s.native_value == 23.5
+
+
+def test_battery_soc_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_soc_pack", "62.9")
+    assert s.native_value == 62.9
+
+
+def test_battery_voltage_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_voltage", "52.71")
+    assert s.native_value == 52.71
 
 
 # ---------------------------------------------------------------------------

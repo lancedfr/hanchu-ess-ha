@@ -28,7 +28,9 @@
     "error": {
       "auth_failed": "Authentication failed, please check your credentials",
       "cannot_connect": "Cannot connect to server",
-      "no_devices": "No devices found under this account"
+      "no_devices": "No devices found under this account",
+      "station_lookup_failed": "Could not load station details",
+      "battery_lookup_failed": "Could not load battery details"
     },
     "abort": {
       "already_configured": "This device is already configured",
@@ -42,6 +44,16 @@
       "battery_power": { "name": "Battery Power" },
       "battery_charge_power": { "name": "Battery Charge Power" },
       "battery_discharge_power": { "name": "Battery Discharge Power" },
+      "battery_temperature_1": { "name": "Battery Temperature 1" },
+      "battery_temperature_2": { "name": "Battery Temperature 2" },
+      "battery_temperature_3": { "name": "Battery Temperature 3" },
+      "battery_temperature_4": { "name": "Battery Temperature 4" },
+      "battery_temperature_env": { "name": "Environment Temperature" },
+      "battery_temperature_pack": { "name": "Pack Temperature" },
+      "battery_temperature_mos": { "name": "MOS Temperature" },
+      "battery_soc_pack": { "name": "Battery SOC" },
+      "battery_voltage": { "name": "Battery Voltage" },
+      "battery_current": { "name": "Battery Current" },
       "pv_power": { "name": "PV Power" },
       "grid_power": { "name": "Grid Power" },
       "grid_import_power": { "name": "Grid Import Power" },

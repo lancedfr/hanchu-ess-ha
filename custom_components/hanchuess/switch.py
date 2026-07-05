@@ -63,9 +63,9 @@ class FastChargeSwitch(SwitchEntity):
         if result.get("success"):
             self._attr_is_on = True
             self.async_write_ha_state()
-            _LOGGER.info("Fast charge started for %s", inverter_serial_number)
+            _LOGGER.info("[HANCHUESS] Fast charge started for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast charge failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast charge failed: %s", result.get("msg"))
 
     async def async_turn_off(self, **kwargs) -> None:
         inverter_serial_number = self._entry.data["sn"]
@@ -75,9 +75,9 @@ class FastChargeSwitch(SwitchEntity):
         if result.get("success"):
             self._attr_is_on = False
             self.async_write_ha_state()
-            _LOGGER.info("Fast charge stopped for %s", inverter_serial_number)
+            _LOGGER.info("[HANCHUESS] Fast charge stopped for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast charge stop failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast charge stop failed: %s", result.get("msg"))
 
 
 class FastDischargeSwitch(SwitchEntity):
@@ -112,9 +112,9 @@ class FastDischargeSwitch(SwitchEntity):
         if result.get("success"):
             self._attr_is_on = True
             self.async_write_ha_state()
-            _LOGGER.info("Fast discharge started for %s", inverter_serial_number)
+            _LOGGER.info("[HANCHUESS] Fast discharge started for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast discharge failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast discharge failed: %s", result.get("msg"))
 
     async def async_turn_off(self, **kwargs) -> None:
         inverter_serial_number = self._entry.data["sn"]
@@ -124,6 +124,6 @@ class FastDischargeSwitch(SwitchEntity):
         if result.get("success"):
             self._attr_is_on = False
             self.async_write_ha_state()
-            _LOGGER.info("Fast discharge stopped for %s", inverter_serial_number)
+            _LOGGER.info("[HANCHUESS] Fast discharge stopped for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast discharge stop failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast discharge stop failed: %s", result.get("msg"))

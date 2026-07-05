@@ -24,6 +24,7 @@ MENU = f"{BASE_URL}/gateway/app/ha/menu"
 IOT_GET = f"{BASE_URL}/gateway/app/ha/iotGet"
 IOT_SET = f"{BASE_URL}/gateway/app/ha/iotSet"
 FAST = f"{BASE_URL}/gateway/app/ha/fastChargeDischarge"
+BMS = f"{BASE_URL}/gateway/platform/bmsInfo/queryBatteryDataDivisions"
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +150,45 @@ async def test_get_station_detail_success(monkeypatch):
 
     data = await client.async_get_station_detail("ST2503268043IE")
     assert data == {"success": True, "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]}}
+
+
+async def test_get_battery_data_success(monkeypatch):
+    client = HanchuessApiClient(BASE_URL, token="t")
+
+    class _Response:
+        status = 200
+
+        async def json(self, content_type=None):
+            return {"success": True, "data": {"sn": "B1", "tBat1": "23.5"}}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _Session:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, **kwargs):
+            assert url == BMS
+            assert kwargs["headers"]["appPlat"] == "ha"
+            assert kwargs["headers"]["access-token"] == "t"
+            assert "Content-Type" not in kwargs["headers"]
+            assert _decrypt_payload(kwargs["data"]) == {"deviceId": "B1"}
+            return _Response()
+
+    monkeypatch.setattr(aiohttp, "ClientSession", _Session)
+
+    data = await client.async_get_battery_data("B1")
+    assert data == {"success": True, "data": {"sn": "B1", "tBat1": "23.5"}}
 
 
 # ---------------------------------------------------------------------------

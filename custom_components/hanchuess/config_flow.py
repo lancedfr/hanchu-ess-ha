@@ -11,11 +11,14 @@ from .const import (
     BASE_URL,
     CONF_REALTIME_INTERVAL,
     CONF_STATISTICS_INTERVAL,
+    CONF_BATTERY_INTERVAL,
     CONF_FAST_CHARGE_DURATION,
     DEFAULT_REALTIME_INTERVAL,
     DEFAULT_STATISTICS_INTERVAL,
+    DEFAULT_BATTERY_INTERVAL,
     DEFAULT_FAST_CHARGE_DURATION,
 )
+from .battery import extract_battery_serials
 from .api import HanchuessApiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -125,11 +128,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         }),
                         errors=errors,
                     )
-                battery_serials = [
-                    item.get("sn")
-                    for item in station_detail.get("data", {}).get("bmsList", [])
-                    if item.get("sn")
-                ]
+                battery_serials = extract_battery_serials(station_detail)
 
                 # Find devType
                 dev_type = "2"
@@ -243,6 +242,10 @@ class HanchuessOptionsFlow(OptionsFlowWithReload):
             vol.Required(
                 CONF_STATISTICS_INTERVAL,
                 default=options.get(CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
+            vol.Required(
+                CONF_BATTERY_INTERVAL,
+                default=options.get(CONF_BATTERY_INTERVAL, DEFAULT_BATTERY_INTERVAL),
             ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
             vol.Required(
                 CONF_FAST_CHARGE_DURATION,

@@ -158,12 +158,12 @@ class HanchuessTimeSlot(TimeEntity):
                 {self._config["control_key"]: seconds},
             )
             if result and result.get("success"):
-                _LOGGER.info("%s set to %s seconds", self._config["name"], seconds)
+                _LOGGER.info("[HANCHUESS] %s set to %s seconds", self._config["name"], seconds)
                 self._pending_value = None
                 self._last_confirmed_value = value
             else:
                 _LOGGER.error(
-                    "Failed to set %s: %s — reverting displayed state",
+                    "[HANCHUESS] Failed to set %s: %s — reverting displayed state",
                     self._config["name"],
                     result.get("msg") if result else "no response",
                 )

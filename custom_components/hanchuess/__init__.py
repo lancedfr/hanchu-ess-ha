@@ -9,7 +9,12 @@ from homeassistant.components import websocket_api
 import homeassistant.helpers.config_validation as cv
 from .const import DOMAIN, PLATFORMS, BASE_URL
 from .api import HanchuessApiClient
-from .coordinator import HanchuessRealtimeCoordinator, HanchuessStatisticsCoordinator
+from .battery import merge_battery_serials
+from .coordinator import (
+    HanchuessRealtimeCoordinator,
+    HanchuessStatisticsCoordinator,
+    HanchuessBatteryCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +28,48 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 CARD_URL = "/hacsfiles/hanchuess/hanchuess-energy-card.js"
+
+
+async def _resolve_station_id(
+    hass: HomeAssistant, entry: ConfigEntry, client: HanchuessApiClient
+) -> str | None:
+    """Return the stored station ID, backfilling it from device status if needed."""
+    station_id = entry.data.get("stationId")
+    if station_id:
+        return station_id
+
+    language = hass.config.language or "en"
+    device_status = await client.async_get_device_status(entry.data["sn"], language)
+    station_id = device_status.get("stationId") if device_status else None
+    if station_id:
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, "stationId": station_id},
+        )
+    return station_id
+
+
+async def _refresh_battery_serials(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    client: HanchuessApiClient,
+    station_id: str | None,
+) -> list[str]:
+    """Refresh stored battery serials from the latest station detail."""
+    existing_serials = entry.data.get("battery_serials", [])
+    if not station_id:
+        return existing_serials
+
+    station_detail = await client.async_get_station_detail(station_id)
+    merged_serials = merge_battery_serials(existing_serials, station_detail)
+    if merged_serials != existing_serials:
+        for other_entry in hass.config_entries.async_entries(DOMAIN):
+            if other_entry.data.get("stationId") == station_id:
+                hass.config_entries.async_update_entry(
+                    other_entry,
+                    data={**other_entry.data, "battery_serials": merged_serials},
+                )
+    return merged_serials
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -171,6 +218,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     stats_coordinator = HanchuessStatisticsCoordinator(hass, entry, client)
     await stats_coordinator.async_config_entry_first_refresh()
 
+    station_id = await _resolve_station_id(hass, entry, client)
+    battery_serials = await _refresh_battery_serials(hass, entry, client, station_id)
+
+    battery_coordinator = None
+    if battery_serials:
+        battery_coordinator = HanchuessBatteryCoordinator(hass, entry, client)
+        await battery_coordinator.async_config_entry_first_refresh()
+
     # Fetch menu to get device-specific min/max values for number entities
     language = hass.config.language or "en"
     inverter_serial_number = entry.data["sn"]
@@ -233,6 +288,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "realtime": coordinator,
         "statistics": stats_coordinator,
+        "battery": battery_coordinator,
         "number_limits": number_limits,
         "startup_values": startup_values,
     }

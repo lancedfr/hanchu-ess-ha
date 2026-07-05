@@ -28,7 +28,9 @@
     "error": {
       "auth_failed": "授权失败，请检查账号信息",
       "cannot_connect": "无法连接到服务器",
-      "no_devices": "该账号下未找到设备"
+      "no_devices": "该账号下未找到设备",
+      "station_lookup_failed": "无法加载站点详情",
+      "battery_lookup_failed": "无法加载电池详情"
     },
     "abort": {
       "already_configured": "该设备已配置",
@@ -42,7 +44,8 @@
         "data": {
           "realtime_interval": "实时轮询间隔（秒）",
           "statistics_interval": "统计轮询间隔（秒）",
-          "fast_charge_duration": "快充/快放时长（分钟）"
+          "battery_interval": "电池轮询间隔（秒）",
+          "fast_charge_duration": "快充/快放时长（分钟)"
         }
       }
     }
@@ -54,6 +57,16 @@
       "battery_power": { "name": "电池功率" },
       "battery_charge_power": { "name": "电池充电功率" },
       "battery_discharge_power": { "name": "电池放电功率" },
+      "battery_temperature_1": { "name": "电池温度 1" },
+      "battery_temperature_2": { "name": "电池温度 2" },
+      "battery_temperature_3": { "name": "电池温度 3" },
+      "battery_temperature_4": { "name": "电池温度 4" },
+      "battery_temperature_env": { "name": "环境温度" },
+      "battery_temperature_pack": { "name": "电池包温度" },
+      "battery_temperature_mos": { "name": "MOS 温度" },
+      "battery_soc_pack": { "name": "电池电量" },
+      "battery_voltage": { "name": "电池电压" },
+      "battery_current": { "name": "电池电流" },
       "pv_power": { "name": "光伏功率" },
       "grid_power": { "name": "电网功率" },
       "grid_import_power": { "name": "电网购电功率" },

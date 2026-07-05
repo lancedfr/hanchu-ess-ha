@@ -66,7 +66,7 @@ class WorkModeSelect(SelectEntity):
         """Send work mode change to device."""
         value = WORK_MODES.get(option)
         if value is None:
-            _LOGGER.error("Unknown work mode: %s", option)
+            _LOGGER.error("[HANCHUESS] Unknown work mode: %s", option)
             return
         inverter_serial_number = self._entry.data["sn"]
         result = await self._client.async_device_control(
@@ -77,6 +77,6 @@ class WorkModeSelect(SelectEntity):
         if result.get("success"):
             self._attr_current_option = option
             self.async_write_ha_state()
-            _LOGGER.info("Work mode set to %s", option)
+            _LOGGER.info("[HANCHUESS] Work mode set to %s", option)
         else:
-            _LOGGER.error("Failed to set work mode: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Failed to set work mode: %s", result.get("msg"))

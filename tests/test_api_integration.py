@@ -133,6 +133,26 @@ async def test_get_station_detail_returns_bms_list(client, inverter_serial_numbe
     assert isinstance(data.get("data", {}).get("bmsList"), list)
 
 
+async def test_get_battery_data_returns_sensor_values(client, inverter_serial_number):
+    device_status = await client.async_get_device_status(inverter_serial_number)
+    station_id = device_status.get("stationId")
+    assert station_id, "Expected getDeviceStatus to return stationId"
+
+    station = await client.async_get_station_detail(station_id)
+    batteries = [
+        item.get("sn")
+        for item in station.get("data", {}).get("bmsList", [])
+        if item.get("sn")
+    ]
+    if not batteries:
+        pytest.skip("No batteries returned for station — skipping battery detail test")
+
+    data = await client.async_get_battery_data(batteries[0])
+    assert isinstance(data, dict)
+    assert data.get("success") is True
+    assert data.get("data", {}).get("sn") == batteries[0]
+
+
 async def test_iot_get(client, inverter_serial_number, dev_type):
     keys = [
         "WORK_MODE_CMB",
