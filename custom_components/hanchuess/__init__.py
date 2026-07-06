@@ -50,19 +50,24 @@ async def _async_initial_refresh(coordinator, entry: ConfigEntry) -> None:
 
 
 async def _resolve_station_id(
-    hass: HomeAssistant, entry: ConfigEntry, client: HanchuessApiClient
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    client: HanchuessApiClient,
+    device_status: dict | None = None,
 ) -> str | None:
     """Return the stored station ID, backfilling it from device status if needed.
     resolve_station_id(...) checks entry.data["stationId"]. If it already exists, it returns it immediately.
-    If missing, it calls client.async_get_device_status(sn, language), pulls stationId from the response,
+    If missing, it uses a provided device_status payload (when available) or calls
+    client.async_get_device_status(sn, language), pulls stationId from the response,
     writes it back into the config entry (async_update_entry), and returns it (or None if unavailable).
     """
     station_id = entry.data.get("stationId")
     if station_id:
         return station_id
 
-    language = hass.config.language or "en"
-    device_status = await client.async_get_device_status(entry.data["sn"], language)
+    if device_status is None:
+        language = hass.config.language or "en"
+        device_status = await client.async_get_device_status(entry.data["sn"], language)
     station_id = device_status.get("stationId") if device_status else None
     if station_id:
         hass.config_entries.async_update_entry(
@@ -247,7 +252,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     stats_coordinator = HanchuessStatisticsCoordinator(hass, entry, client)
     await _async_initial_refresh(stats_coordinator, entry)
 
-    station_id = await _resolve_station_id(hass, entry, client)
+    station_id = await _resolve_station_id(hass, entry, client, coordinator.data)
     battery_serials = await _refresh_battery_serials(hass, entry, client, station_id)
 
     battery_coordinator = None
