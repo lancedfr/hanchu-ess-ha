@@ -25,4 +25,5 @@ Fixes #<!-- issue number, if applicable -->
 
 - [ ] Updated `CHANGELOG.md` under `## [Unreleased]`
 - [ ] Updated the README / docs if user-facing behaviour changed
+- [ ] Updated `diagnostics.py` and redacted any sensitive information
 - [ ] Bumped `manifest.json` version (if this is a release-worthy change)
