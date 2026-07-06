@@ -10,6 +10,8 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-06
+
 ### Added
 - Per-battery-pack sensor support using discovered battery serials, including pack
   SOC, voltage, current, and temperature sensors.
@@ -147,7 +149,8 @@ later versions are tracked here going forward.
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.12...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.12...v1.3.0
 [1.2.12]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.11...v1.2.12
 [1.2.11]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.10...v1.2.11
 [1.2.10]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.9...v1.2.10
