@@ -142,6 +142,7 @@ async def test_get_station_detail_success(monkeypatch):
             assert url == STATION_DETAIL
             assert kwargs["headers"]["appPlat"] == "ha"
             assert kwargs["headers"]["access-token"] == "t"
+            assert kwargs["headers"]["locale"] == "en"
             assert "Content-Type" not in kwargs["headers"]
             assert _decrypt_payload(kwargs["data"]) == {"stationId": "ST2503268043IE"}
             return _Response()
@@ -181,6 +182,7 @@ async def test_get_battery_data_success(monkeypatch):
             assert url == BMS
             assert kwargs["headers"]["appPlat"] == "ha"
             assert kwargs["headers"]["access-token"] == "t"
+            assert kwargs["headers"]["locale"] == "en"
             assert "Content-Type" not in kwargs["headers"]
             assert _decrypt_payload(kwargs["data"]) == {"deviceId": "B1"}
             return _Response()
@@ -189,6 +191,24 @@ async def test_get_battery_data_success(monkeypatch):
 
     data = await client.async_get_battery_data("B1")
     assert data == {"success": True, "data": {"sn": "B1", "tBat1": "23.5"}}
+
+
+def test_headers_default_locale_is_en():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    headers = client._headers()
+    assert headers["locale"] == "en"
+
+
+def test_headers_zh_locale_is_normalized():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    headers = client._headers("zh-Hans")
+    assert headers["locale"] == "zh"
+
+
+def test_headers_unknown_locale_falls_back_to_en():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    headers = client._headers("fr")
+    assert headers["locale"] == "en"
 
 
 # ---------------------------------------------------------------------------

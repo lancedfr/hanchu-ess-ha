@@ -158,9 +158,10 @@ class HanchuessBatteryCoordinator(DataUpdateCoordinator):
         battery_serials = self.entry.data.get("battery_serials", [])
         if not battery_serials:
             return {}
+        language = self.hass.config.language or "en"
 
         async def _fetch(serial: str):
-            return serial, await self.client.async_get_battery_data(serial)
+            return serial, await self.client.async_get_battery_data(serial, language)
 
         results = await asyncio.gather(*(_fetch(serial) for serial in battery_serials))
         data = {}

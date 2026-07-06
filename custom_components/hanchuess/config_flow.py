@@ -104,8 +104,9 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 client = self._client or HanchuessApiClient(BASE_URL, token=self._token)
                 self._client = client
 
+                language = self.hass.config.language or "en"
                 device_status = await client.async_get_device_status(
-                    inverter_serial_number
+                    inverter_serial_number, language
                 )
                 station_id = device_status.get("stationId")
                 if not station_id:
@@ -118,7 +119,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         errors=errors,
                     )
 
-                station_detail = await client.async_get_station_detail(station_id)
+                station_detail = await client.async_get_station_detail(station_id, language)
                 if not station_detail:
                     errors["base"] = "battery_lookup_failed"
                     return self.async_show_form(

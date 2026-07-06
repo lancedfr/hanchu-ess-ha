@@ -66,7 +66,8 @@ def _patched_client(token="tok", devices=None):
 
 
 async def test_user_flow_creates_entry(hass: HomeAssistant):
-    patcher, _ = _patched_client(
+    hass.config.language = "fr"
+    patcher, instance = _patched_client(
         token="tok", devices=[{"sn": "SN1", "devType": "2"}]
     )
     try:
@@ -100,6 +101,8 @@ async def test_user_flow_creates_entry(hass: HomeAssistant):
             "B007EN5811054",
             "B002MU4810030",
         ]
+        instance.async_get_device_status.assert_awaited_once_with("SN1", "fr")
+        instance.async_get_station_detail.assert_awaited_once_with("ST2503268043IE", "fr")
     finally:
         patcher.stop()
 
@@ -248,6 +251,7 @@ async def test_options_flow_rejects_out_of_range(hass: HomeAssistant):
 
 
 async def test_setup_entry_refreshes_battery_serials(hass: HomeAssistant):
+    hass.config.language = "fr"
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -272,7 +276,10 @@ async def test_setup_entry_refreshes_battery_serials(hass: HomeAssistant):
     client.async_get_menu = AsyncMock(return_value={"code": 200, "data": {}})
     client.async_iot_get = AsyncMock(return_value={})
     client.async_get_battery_data = AsyncMock(
-        side_effect=lambda serial: {"success": True, "data": {"sn": serial}}
+        side_effect=lambda serial, language="en": {
+            "success": True,
+            "data": {"sn": serial, "language": language},
+        }
     )
     client.should_refresh_token.return_value = False
 
@@ -284,9 +291,12 @@ async def test_setup_entry_refreshes_battery_serials(hass: HomeAssistant):
 
     assert result is True
     assert entry.data["battery_serials"] == ["B1", "B2"]
+    client.async_get_station_detail.assert_awaited_once_with("ST2503268043IE", "fr")
+    client.async_get_battery_data.assert_any_await("B1", "fr")
 
 
 async def test_setup_entry_backfills_station_id(hass: HomeAssistant):
+    hass.config.language = "fr"
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -306,6 +316,12 @@ async def test_setup_entry_backfills_station_id(hass: HomeAssistant):
     client.async_get_device_statistics = AsyncMock(return_value={"load": 1})
     client.async_get_menu = AsyncMock(return_value={"code": 200, "data": {}})
     client.async_iot_get = AsyncMock(return_value={})
+    client.async_get_battery_data = AsyncMock(
+        side_effect=lambda serial, language="en": {
+            "success": True,
+            "data": {"sn": serial, "language": language},
+        }
+    )
     client.should_refresh_token.return_value = False
 
     hass.data.setdefault(DOMAIN, {})
@@ -317,3 +333,6 @@ async def test_setup_entry_backfills_station_id(hass: HomeAssistant):
     assert result is True
     assert entry.data["stationId"] == "ST2503268043IE"
     assert entry.data["battery_serials"] == ["B1", "B2"]
+    client.async_get_device_status.assert_awaited_once_with("SN1", "fr")
+    client.async_get_station_detail.assert_awaited_once_with("ST2503268043IE", "fr")
+    client.async_get_battery_data.assert_any_await("B1", "fr")

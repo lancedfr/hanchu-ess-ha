@@ -60,7 +60,8 @@ async def _refresh_battery_serials(
     if not station_id:
         return existing_serials
 
-    station_detail = await client.async_get_station_detail(station_id)
+    language = hass.config.language or "en"
+    station_detail = await client.async_get_station_detail(station_id, language)
     merged_serials = merge_battery_serials(existing_serials, station_detail)
     if merged_serials != existing_serials:
         for other_entry in hass.config_entries.async_entries(DOMAIN):

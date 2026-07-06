@@ -32,32 +32,45 @@ class HanchuessApiClient:
     def token(self) -> str:
         return self._token
 
-    def _headers(self, language: str = None) -> dict:
+    def _headers(self, language: str = "en") -> dict:
         headers = {
             "Content-Type": "application/json",
             "appPlat": "ha",
         }
         if self._token:
             headers["access-token"] = self._token
-        if language:
-            # HA returns zh-Hans/zh-Hant, server expects zh
-            if language.startswith("zh"):
-                language = "zh"
-            headers["locale"] = language
+        # Server locale handling: normalize zh variants, otherwise default to en.
+        normalized = "en"
+        if isinstance(language, str) and language.lower().startswith("zh"):
+            normalized = "zh"
+        headers["locale"] = normalized
         return headers
 
-    async def _request(self, path: str, data: dict, language: str = None, retries: int = 3) -> dict:
+    async def _request(
+        self,
+        path: str,
+        data: dict | str | bytes,
+        language: str = "en",
+        retries: int = 3,
+        send_as_json: bool = True,
+    ) -> dict:
         url = f"{self._domain}{path}"
         _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
         last_err = None
         for attempt in range(1, retries + 1):
             try:
+                headers = self._headers(language)
+                request_kwargs = {"json": data}
+                if not send_as_json:
+                    headers.pop("Content-Type", None)
+                    request_kwargs = {"data": data}
+
                 async with async_timeout.timeout(10):
                     async with aiohttp.ClientSession(
                         connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
                     ) as session:
                         async with session.post(
-                            url, json=data, headers=self._headers(language)
+                            url, headers=headers, **request_kwargs
                         ) as response:
                             result = await response.json(content_type=None)
                             _LOGGER.debug("[HANCHUESS] response: %s status=%s body=%s", path, response.status, str(result)[:500])
@@ -130,79 +143,25 @@ class HanchuessApiClient:
         _LOGGER.info("[HANCHUESS] getDeviceList: 0 devices")
         return []
 
-    async def async_get_station_detail(self, station_id: str) -> dict:
-        url = f"{self._domain}/gateway/platform/station/detail"
+    async def async_get_station_detail(self, station_id: str, language: str = "en") -> dict:
         payload = _encrypt_payload({"stationId": station_id})
-        headers = {
-            "locale": "en",
-            "appPlat": "ha",
-        }
-        if self._token:
-            headers["access-token"] = self._token
+        result = await self._request(
+            "/gateway/platform/station/detail",
+            payload,
+            language=language,
+            send_as_json=False,
+        )
+        return result or {}
 
-        _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
-        try:
-            async with async_timeout.timeout(10):
-                async with aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-                ) as session:
-                    async with session.post(
-                        url,
-                        data=payload,
-                        headers=headers,
-                    ) as response:
-                        result = await response.json(content_type=None)
-                        _LOGGER.debug(
-                            "[HANCHUESS] response: %s status=%s body=%s",
-                            "/gateway/platform/station/detail",
-                            response.status,
-                            str(result)[:500],
-                        )
-                        if response.status == 401:
-                            return {"success": False, "code": 401}
-                        return result if response.status == 200 else {}
-        except TimeoutError:
-            _LOGGER.warning("[HANCHUESS] Station detail request timed out: %s", url)
-        except Exception as err:
-            _LOGGER.warning("[HANCHUESS] Station detail request failed: %s - %s", url, err)
-        return {}
-
-    async def async_get_battery_data(self, device_id: str) -> dict:
-        url = f"{self._domain}/gateway/platform/bmsInfo/queryBatteryDataDivisions"
+    async def async_get_battery_data(self, device_id: str, language: str = "en") -> dict:
         payload = _encrypt_payload({"deviceId": device_id})
-        headers = {
-            "locale": "en",
-            "appPlat": "ha",
-        }
-        if self._token:
-            headers["access-token"] = self._token
-
-        _LOGGER.debug("[HANCHUESS] request: %s token=%s", url, "yes" if self._token else "no")
-        try:
-            async with async_timeout.timeout(10):
-                async with aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-                ) as session:
-                    async with session.post(
-                        url,
-                        data=payload,
-                        headers=headers,
-                    ) as response:
-                        result = await response.json(content_type=None)
-                        _LOGGER.debug(
-                            "[HANCHUESS] response: %s status=%s body=%s",
-                            "/gateway/platform/bmsInfo/queryBatteryDataDivisions",
-                            response.status,
-                            str(result)[:500],
-                        )
-                        if response.status == 401:
-                            return {"success": False, "code": 401}
-                        return result if response.status == 200 else {}
-        except TimeoutError:
-            _LOGGER.warning("[HANCHUESS] Battery data request timed out: %s", url)
-        except Exception as err:
-            _LOGGER.warning("[HANCHUESS] Battery data request failed: %s - %s", url, err)
-        return {}
+        result = await self._request(
+            "/gateway/platform/bmsInfo/queryBatteryDataDivisions",
+            payload,
+            language=language,
+            send_as_json=False,
+        )
+        return result or {}
 
     async def async_get_device_status(self, sn: str, language: str = "en") -> dict | None:
         result = await self._request(
