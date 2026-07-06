@@ -3,9 +3,10 @@ import logging
 import os
 import asyncio
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.components import websocket_api
+from homeassistant.exceptions import ConfigEntryNotReady
 import homeassistant.helpers.config_validation as cv
 from .const import DOMAIN, PLATFORMS, BASE_URL
 from .api import HanchuessApiClient
@@ -28,6 +29,24 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 CARD_URL = "/hacsfiles/hanchuess/hanchuess-energy-card.js"
+
+
+async def _async_initial_refresh(coordinator, entry: ConfigEntry) -> None:
+    """Run the first coordinator refresh in a state-safe way.
+
+    Home Assistant requires async_config_entry_first_refresh() to be called only
+    while the entry is SETUP_IN_PROGRESS. Some test setups call async_setup_entry
+    directly with NOT_LOADED entries, so fall back to async_refresh() there.
+    """
+    if entry.state is ConfigEntryState.SETUP_IN_PROGRESS:
+        await coordinator.async_config_entry_first_refresh()
+        return
+
+    await coordinator.async_refresh()
+    if not coordinator.last_update_success:
+        raise ConfigEntryNotReady(
+            f"Initial coordinator refresh failed for {coordinator.name}"
+        )
 
 
 async def _resolve_station_id(
@@ -223,10 +242,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = hass.data[DOMAIN]["_client"]
 
     coordinator = HanchuessRealtimeCoordinator(hass, entry, client)
-    await coordinator.async_config_entry_first_refresh()
+    await _async_initial_refresh(coordinator, entry)
 
     stats_coordinator = HanchuessStatisticsCoordinator(hass, entry, client)
-    await stats_coordinator.async_config_entry_first_refresh()
+    await _async_initial_refresh(stats_coordinator, entry)
 
     station_id = await _resolve_station_id(hass, entry, client)
     battery_serials = await _refresh_battery_serials(hass, entry, client, station_id)
@@ -234,7 +253,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     battery_coordinator = None
     if battery_serials:
         battery_coordinator = HanchuessBatteryCoordinator(hass, entry, client)
-        await battery_coordinator.async_config_entry_first_refresh()
+        await _async_initial_refresh(battery_coordinator, entry)
 
     # Fetch menu to get device-specific min/max values for number entities
     language = hass.config.language or "en"
