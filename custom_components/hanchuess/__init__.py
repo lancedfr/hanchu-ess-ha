@@ -33,7 +33,11 @@ CARD_URL = "/hacsfiles/hanchuess/hanchuess-energy-card.js"
 async def _resolve_station_id(
     hass: HomeAssistant, entry: ConfigEntry, client: HanchuessApiClient
 ) -> str | None:
-    """Return the stored station ID, backfilling it from device status if needed."""
+    """Return the stored station ID, backfilling it from device status if needed.
+    resolve_station_id(...) checks entry.data["stationId"]. If it already exists, it returns it immediately.
+    If missing, it calls client.async_get_device_status(sn, language), pulls stationId from the response,
+    writes it back into the config entry (async_update_entry), and returns it (or None if unavailable).
+    """
     station_id = entry.data.get("stationId")
     if station_id:
         return station_id
@@ -55,7 +59,12 @@ async def _refresh_battery_serials(
     client: HanchuessApiClient,
     station_id: str | None,
 ) -> list[str]:
-    """Refresh stored battery serials from the latest station detail."""
+    """Refresh stored battery serials from the latest station detail.
+    refresh_battery_serials(...) starts from stored battery_serials. If there is no station_id, it returns
+    existing serials unchanged. Otherwise, it fetches station detail, merges discovered battery serials
+    with existing ones via merge_battery_serials, and if the merged list is changed, it updates all Hanchu
+    entries that share that same stationId so they all store the same battery_serials. It finally returns
+    the merged serial list."""
     existing_serials = entry.data.get("battery_serials", [])
     if not station_id:
         return existing_serials
