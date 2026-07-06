@@ -6,6 +6,8 @@ usage() {
 Usage: restore-ha.sh --restore-from PATH [options]
 
 Restore the Home Assistant integration directory via SFTP from a local backup.
+PATH may be a timestamped <timestamp>.tar.gz produced by backup-ha.sh (requires
+`tar`), or a legacy backup directory.
 Can be run on Windows using Git Bash.
 
 Options:
@@ -13,7 +15,7 @@ Options:
   -u, --user USER              SSH user (default: root)
   -P, --port PORT              SSH port (default: 22)
   -r, --remote-dir PATH        Remote target directory (default: homeassistant/custom_components/hanchuess)
-      --restore-from PATH      Local backup directory to restore from (required)
+      --restore-from PATH      Local backup .tar.gz file or directory to restore from (required)
   -p, --password PASSWORD      Password for non-interactive mode (requires sshpass)
       --help                   Show this help
 
@@ -21,7 +23,7 @@ Environment:
   HANCHUESS_SFTP_PASSWORD      Alternative to --password (requires sshpass)
 
 Example:
-  bash tools/restore-ha.sh --host 192.168.0.110 --user root --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000"
+  bash tools/restore-ha.sh --host 192.168.0.110 --user root --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000.tar.gz"
 EOF
 }
 
@@ -81,8 +83,8 @@ if [[ -z "$RESTORE_FROM" ]]; then
   exit 1
 fi
 
-if [[ ! -d "$RESTORE_FROM" ]]; then
-  echo "Error: restore directory does not exist: $RESTORE_FROM" >&2
+if [[ ! -e "$RESTORE_FROM" ]]; then
+  echo "Error: restore path does not exist: $RESTORE_FROM" >&2
   exit 1
 fi
 
@@ -99,13 +101,27 @@ resolve_restore_source() {
   fi
 }
 
-RESTORE_SOURCE_SFTP="$(resolve_restore_source "$RESTORE_FROM")"
-
+EXTRACT_DIR=""
 BATCH_FILE="$(mktemp)"
 cleanup() {
   rm -f "$BATCH_FILE"
+  if [[ -n "$EXTRACT_DIR" ]]; then
+    rm -rf "$EXTRACT_DIR"
+  fi
 }
 trap cleanup EXIT
+
+if [[ -f "$RESTORE_FROM" ]]; then
+  if ! command -v tar >/dev/null 2>&1; then
+    echo "Error: tar not found in PATH." >&2
+    exit 1
+  fi
+  EXTRACT_DIR="$(mktemp -d)"
+  tar -xzf "$RESTORE_FROM" -C "$EXTRACT_DIR"
+  RESTORE_FROM="$EXTRACT_DIR"
+fi
+
+RESTORE_SOURCE_SFTP="$(resolve_restore_source "$RESTORE_FROM")"
 
 cat > "$BATCH_FILE" <<EOF
 lcd "$RESTORE_SOURCE_SFTP"
