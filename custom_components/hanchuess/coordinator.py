@@ -48,6 +48,7 @@ class HanchuessRealtimeCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="hanchuess_realtime",
+            config_entry=entry,
             update_interval=timedelta(
                 seconds=entry.options.get(
                     CONF_REALTIME_INTERVAL, DEFAULT_REALTIME_INTERVAL
@@ -99,6 +100,7 @@ class HanchuessStatisticsCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="hanchuess_statistics",
+            config_entry=entry,
             update_interval=timedelta(
                 seconds=entry.options.get(
                     CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL
@@ -145,6 +147,7 @@ class HanchuessBatteryCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="hanchuess_battery",
+            config_entry=entry,
             update_interval=timedelta(
                 seconds=entry.options.get(
                     CONF_BATTERY_INTERVAL, DEFAULT_BATTERY_INTERVAL
