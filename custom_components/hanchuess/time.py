@@ -101,7 +101,8 @@ class HanchuessTimeSlot(TimeEntity):
         self._entry = entry
         self._config = config
         self._attr_name = config["name"]
-        self._attr_unique_id = f"{entry.data['sn']}_{slot_key}"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_{slot_key}"
         self._attr_icon = config["icon"]
         self._debounce_task = None
         self._pending_value = None
@@ -123,9 +124,10 @@ class HanchuessTimeSlot(TimeEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
@@ -149,18 +151,19 @@ class HanchuessTimeSlot(TimeEntity):
             if value is None:
                 return
             seconds = (value.hour * 3600) + (value.minute * 60)
+            inverter_serial_number = self._entry.data["sn"]
             result = await self._client.async_device_control(
-                self._entry.data["sn"],
+                inverter_serial_number,
                 "2",
                 {self._config["control_key"]: seconds},
             )
             if result and result.get("success"):
-                _LOGGER.info("%s set to %s seconds", self._config["name"], seconds)
+                _LOGGER.info("[HANCHUESS] %s set to %s seconds", self._config["name"], seconds)
                 self._pending_value = None
                 self._last_confirmed_value = value
             else:
                 _LOGGER.error(
-                    "Failed to set %s: %s — reverting displayed state",
+                    "[HANCHUESS] Failed to set %s: %s — reverting displayed state",
                     self._config["name"],
                     result.get("msg") if result else "no response",
                 )

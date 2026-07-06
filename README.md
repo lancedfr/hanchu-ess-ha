@@ -12,6 +12,7 @@ This fork extends the original guoxiatech/hanchu-ess-ha integration — publishe
 - Battery Charge Power (W) — charge only derived power
 - Battery Discharge Power (W) — discharge only derived power
 - Battery Capacity (kWh)
+- Battery pack sensors (per discovered battery serial): Pack SOC (%), Pack SOH (%), Pack Voltage (V), Pack Current (A), Design Capacity (kWh), Full Capacity (Ah), Remaining Capacity (Ah), Temperature 1-N (degC, based on `numBatT`), Environment Temperature, Pack Temperature, MOS Temperature
 - Grid Power (W) — signed (positive = import, negative = export)
 - Grid Import Power (W) — import only derived power
 - Grid Export Power (W) — export only derived power
@@ -76,6 +77,7 @@ Low-level service for sending arbitrary key/value control signals directly to th
 - Startup state reading — entities populate with current device values on HA restart
 - Debounced time slot entities — prevents multiple API calls when adjusting times
 - Power sensors normalised to watts using the Hanchu API's explicit per-field unit (the API returns mixed W/kW units)
+- Automatic station + battery serial discovery during setup, with battery serial refresh from station detail
 - Work mode reads current state on startup
 - Fast Charge/Discharge as proper switch entities, plus an automatable `fast_charge` service
 
@@ -119,6 +121,7 @@ devices automatically:
 After setup, open the integration and click **Configure** to adjust:
 - **Realtime poll interval** (default 60 s, minimum 30 s)
 - **Statistics poll interval** (default 5 min / 300 s, minimum 5 min)
+- **Battery poll interval** (default 10 min / 600 s, minimum 5 min)
 - **Fast charge/discharge duration** (default 60 min, range 5 min–4 h) — the
   duration applied when the Fast Charge / Fast Discharge switches are turned on
 
@@ -139,6 +142,7 @@ After initial setup, polling intervals and fast charge duration can be adjusted 
 |---|---|---|---|
 | Realtime poll interval | 60s | 30–3600s | How often live sensor data is refreshed |
 | Statistics poll interval | 300s | 300–86400s | How often daily energy totals are refreshed |
+| Battery poll interval | 600s | 300–86400s | How often per-battery-pack diagnostics sensors are refreshed |
 | Fast charge duration | 60 min | 5–240 min | Default duration when triggering fast charge/discharge |
 
 ## Predbat Integration
@@ -493,7 +497,6 @@ instructions, CI checks, and the contribution workflow are documented in
 
 ## Known Limitations
 
-- Battery unit sensors (individual pack SOC, SOH, temperature, voltage) are not yet implemented — these require a separate API endpoint
 - Token refresh is handled automatically every 25 days
 
 ## Diagnostics
@@ -503,9 +506,9 @@ This integration supports Home Assistant's built-in diagnostics download. To dow
 1. Go to **Settings → Devices & Services**
 2. Find the Hanchuess integration and click **three dots → Download diagnostics**
 
-The report includes system information, integration config, live device state, and statistics. The following sensitive fields are automatically redacted:
+The report includes system information, integration config, live device state, statistics, and battery payload metadata. The following sensitive fields are automatically redacted:
 
-`token`, `account`, `password`, `sn`, `stationId`, `username`, `pwd`, `unique_id`, `title`
+`token`, `account`, `password`, `sn`, `stationId`, `username`, `pwd`, `unique_id`, `title`, `devId`, `deviceId`, `battery_serials`
 
 This is useful when reporting issues — you can share the diagnostics file without exposing credentials.
 

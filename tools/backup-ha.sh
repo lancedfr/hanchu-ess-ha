@@ -5,8 +5,9 @@ usage() {
   cat <<'EOF'
 Usage: backup-ha.sh [options]
 
-Download the current Home Assistant integration directory via SFTP into a
-timestamped local backup folder.
+Download the current Home Assistant integration directory via SFTP and
+archive it into a timestamped local backup file (<timestamp>.tar.gz).
+Requires the `tar` command.
 Can be run on Windows using Git Bash.
 
 Options:
@@ -28,6 +29,11 @@ EOF
 
 if ! command -v sftp >/dev/null 2>&1; then
   echo "Error: sftp not found in PATH." >&2
+  exit 1
+fi
+
+if ! command -v tar >/dev/null 2>&1; then
+  echo "Error: tar not found in PATH." >&2
   exit 1
 fi
 
@@ -90,8 +96,10 @@ mkdir -p "$BACKUP_ROOT"
 BACKUP_ROOT_SFTP="$(cd "$BACKUP_ROOT" && pwd)"
 
 BATCH_FILE="$(mktemp)"
+DOWNLOAD_DIR="$(mktemp -d)"
 cleanup() {
   rm -f "$BATCH_FILE"
+  rm -rf "$DOWNLOAD_DIR"
 }
 trap cleanup EXIT
 
@@ -112,15 +120,18 @@ run_sftp_batch() {
 }
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP_DIR="$BACKUP_ROOT_SFTP/$STAMP"
-mkdir -p "$BACKUP_DIR"
+TAR_PATH="$BACKUP_ROOT_SFTP/$STAMP.tar.gz"
 
 cat > "$BATCH_FILE" <<EOF
-lcd "$BACKUP_DIR"
+lcd "$DOWNLOAD_DIR"
 cd "$REMOTE_DIR_PARENT"
 get -r "$REMOTE_DIR_NAME"
 EOF
 
-echo "Creating remote backup in: $BACKUP_DIR"
+echo "Downloading remote backup..."
 run_sftp_batch "$BATCH_FILE"
+
+tar -czf "$TAR_PATH" -C "$DOWNLOAD_DIR" "$REMOTE_DIR_NAME"
+
+echo "Created backup: $TAR_PATH"
 

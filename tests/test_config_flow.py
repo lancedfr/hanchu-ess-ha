@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.hanchuess as hanchuess
 from custom_components.hanchuess.const import DOMAIN
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -47,11 +48,26 @@ def _patched_client(token="tok", devices=None):
     instance.async_get_devices = AsyncMock(
         return_value=devices if devices is not None else []
     )
+    instance.async_get_device_status = AsyncMock(
+        return_value={"stationId": "ST2503268043IE"}
+    )
+    instance.async_get_station_detail = AsyncMock(
+        return_value={
+            "code": 200,
+            "data": {
+                "bmsList": [
+                    {"sn": "B007EN5811054"},
+                    {"sn": "B002MU4810030"},
+                ]
+            },
+        }
+    )
     return patcher, instance
 
 
 async def test_user_flow_creates_entry(hass: HomeAssistant):
-    patcher, _ = _patched_client(
+    hass.config.language = "fr"
+    patcher, instance = _patched_client(
         token="tok", devices=[{"sn": "SN1", "devType": "2"}]
     )
     try:
@@ -80,6 +96,13 @@ async def test_user_flow_creates_entry(hass: HomeAssistant):
         assert result3["data"]["sn"] == "SN1"
         assert result3["data"]["dev_type"] == "2"
         assert result3["data"]["token"] == "tok"
+        assert result3["data"]["stationId"] == "ST2503268043IE"
+        assert result3["data"]["battery_serials"] == [
+            "B007EN5811054",
+            "B002MU4810030",
+        ]
+        instance.async_get_device_status.assert_awaited_once_with("SN1", "fr")
+        instance.async_get_station_detail.assert_awaited_once_with("ST2503268043IE", "fr")
     finally:
         patcher.stop()
 
@@ -151,6 +174,27 @@ async def test_reauth_flow_success(hass: HomeAssistant):
         patcher.stop()
 
 
+async def test_import_flow_preserves_station_id(hass: HomeAssistant):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "import"},
+        data={
+            "sn": "SN1",
+            "dev_type": "2",
+            "token": "tok",
+            "stationId": "ST2503268043IE",
+            "battery_serials": ["B007EN5811054", "B002MU4810030"],
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["stationId"] == "ST2503268043IE"
+    assert result["data"]["battery_serials"] == [
+        "B007EN5811054",
+        "B002MU4810030",
+    ]
+
+
 async def test_options_flow_sets_options(hass: HomeAssistant):
     entry = MockConfigEntry(
         domain=DOMAIN, data={"sn": "SN1", "token": "tok"}, unique_id="SN1"
@@ -169,6 +213,7 @@ async def test_options_flow_sets_options(hass: HomeAssistant):
             {
                 "realtime_interval": 120,
                 "statistics_interval": 600,
+                "battery_interval": 900,
                 "fast_charge_duration": 45,
             },
         )
@@ -177,6 +222,7 @@ async def test_options_flow_sets_options(hass: HomeAssistant):
     assert entry.options == {
         "realtime_interval": 120,
         "statistics_interval": 600,
+        "battery_interval": 900,
         "fast_charge_duration": 45,
     }
 
@@ -202,3 +248,91 @@ async def test_options_flow_rejects_out_of_range(hass: HomeAssistant):
         )
 
     assert entry.options == {}
+
+
+async def test_setup_entry_refreshes_battery_serials(hass: HomeAssistant):
+    hass.config.language = "fr"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "sn": "SN1",
+            "token": "tok",
+            "stationId": "ST2503268043IE",
+            "battery_serials": ["B1"],
+        },
+        unique_id="SN1",
+    )
+    entry.add_to_hass(hass)
+
+    client = MagicMock()
+    client.async_get_station_detail = AsyncMock(
+        return_value={
+            "success": True,
+            "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]},
+        }
+    )
+    client.async_get_device_status = AsyncMock(return_value={"devStatus": 1})
+    client.async_get_device_statistics = AsyncMock(return_value={"load": 1})
+    client.async_get_menu = AsyncMock(return_value={"code": 200, "data": {}})
+    client.async_iot_get = AsyncMock(return_value={})
+    client.async_get_battery_data = AsyncMock(
+        side_effect=lambda serial, language="en": {
+            "success": True,
+            "data": {"sn": serial, "language": language},
+        }
+    )
+    client.should_refresh_token.return_value = False
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["_client"] = client
+
+    with patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()):
+        result = await hanchuess.async_setup_entry(hass, entry)
+
+    assert result is True
+    assert entry.data["battery_serials"] == ["B1", "B2"]
+    client.async_get_station_detail.assert_awaited_once_with("ST2503268043IE", "fr")
+    client.async_get_battery_data.assert_any_await("B1", "fr")
+
+
+async def test_setup_entry_backfills_station_id(hass: HomeAssistant):
+    hass.config.language = "fr"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "sn": "SN1",
+            "token": "tok",
+            "battery_serials": ["B1"],
+        },
+        unique_id="SN1",
+    )
+    entry.add_to_hass(hass)
+
+    client = MagicMock()
+    client.async_get_device_status = AsyncMock(return_value={"stationId": "ST2503268043IE"})
+    client.async_get_station_detail = AsyncMock(
+        return_value={"success": True, "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]}}
+    )
+    client.async_get_device_statistics = AsyncMock(return_value={"load": 1})
+    client.async_get_menu = AsyncMock(return_value={"code": 200, "data": {}})
+    client.async_iot_get = AsyncMock(return_value={})
+    client.async_get_battery_data = AsyncMock(
+        side_effect=lambda serial, language="en": {
+            "success": True,
+            "data": {"sn": serial, "language": language},
+        }
+    )
+    client.should_refresh_token.return_value = False
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN]["_client"] = client
+
+    with patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()):
+        result = await hanchuess.async_setup_entry(hass, entry)
+
+    assert result is True
+    assert entry.data["stationId"] == "ST2503268043IE"
+    assert entry.data["battery_serials"] == ["B1", "B2"]
+    client.async_get_device_status.assert_awaited_once_with("SN1", "fr")
+    client.async_get_station_detail.assert_awaited_once_with("ST2503268043IE", "fr")
+    client.async_get_battery_data.assert_any_await("B1", "fr")

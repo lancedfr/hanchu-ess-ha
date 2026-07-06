@@ -11,11 +11,14 @@ from .const import (
     BASE_URL,
     CONF_REALTIME_INTERVAL,
     CONF_STATISTICS_INTERVAL,
+    CONF_BATTERY_INTERVAL,
     CONF_FAST_CHARGE_DURATION,
     DEFAULT_REALTIME_INTERVAL,
     DEFAULT_STATISTICS_INTERVAL,
+    DEFAULT_BATTERY_INTERVAL,
     DEFAULT_FAST_CHARGE_DURATION,
 )
+from .battery import extract_battery_serials
 from .api import HanchuessApiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,6 +30,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self):
         self._token = None
         self._devices = []
+        self._client = None
 
     @staticmethod
     @callback
@@ -40,6 +44,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         shared_client = existing.get("_client")
         if shared_client and shared_client.token:
             self._token = shared_client.token
+            self._client = shared_client
             self._devices = await shared_client.async_get_devices()
             if self._devices:
                 return await self.async_step_select_device()
@@ -52,6 +57,7 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             if token:
                 self._token = client.token
+                self._client = client
                 self._devices = await client.async_get_devices()
                 if self._devices:
                     return await self.async_step_select_device()
@@ -71,43 +77,6 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_device(self, user_input=None):
         """Step 2: Select devices (multi-select)."""
         errors = {}
-        if user_input is not None:
-            selected = user_input.get("devices", [])
-            if not selected:
-                errors["base"] = "no_devices"
-            else:
-                # Create entry for the first device
-                sn = selected[0]
-                await self.async_set_unique_id(sn)
-                self._abort_if_unique_id_configured()
-
-                # Find devType
-                dev_type = "2"
-                for d in self._devices:
-                    if d["sn"] == sn:
-                        dev_type = d.get("devType", "2")
-                        break
-
-                # Build pending devices with devType
-                pending = []
-                for p_sn in selected[1:]:
-                    p_type = "2"
-                    for d in self._devices:
-                        if d["sn"] == p_sn:
-                            p_type = d.get("devType", "2")
-                            break
-                    pending.append({"sn": p_sn, "devType": p_type})
-
-                return self.async_create_entry(
-                    title=f"Hanchuess {sn}",
-                    data={
-                        "sn": sn,
-                        "dev_type": dev_type,
-                        "token": self._token,
-                        "pending_devices": pending,
-                    },
-                )
-
         # Filter inverters and exclude already configured
         configured_ids = set()
         for entry in self.hass.config_entries.async_entries(DOMAIN):
@@ -122,6 +91,75 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not available:
             return self.async_abort(reason="no_devices")
 
+        if user_input is not None:
+            selected = user_input.get("devices", [])
+            if not selected:
+                errors["base"] = "no_devices"
+            else:
+                # Create entry for the first device
+                inverter_serial_number = selected[0]
+                await self.async_set_unique_id(inverter_serial_number)
+                self._abort_if_unique_id_configured()
+
+                client = self._client or HanchuessApiClient(BASE_URL, token=self._token)
+                self._client = client
+
+                language = self.hass.config.language or "en"
+                device_status = await client.async_get_device_status(
+                    inverter_serial_number, language
+                )
+                station_id = device_status.get("stationId")
+                if not station_id:
+                    errors["base"] = "station_lookup_failed"
+                    return self.async_show_form(
+                        step_id="select_device",
+                        data_schema=vol.Schema({
+                            vol.Required("devices"): cv.multi_select(available),
+                        }),
+                        errors=errors,
+                    )
+
+                station_detail = await client.async_get_station_detail(station_id, language)
+                if not station_detail:
+                    errors["base"] = "battery_lookup_failed"
+                    return self.async_show_form(
+                        step_id="select_device",
+                        data_schema=vol.Schema({
+                            vol.Required("devices"): cv.multi_select(available),
+                        }),
+                        errors=errors,
+                    )
+                battery_serials = extract_battery_serials(station_detail)
+
+                # Find devType
+                dev_type = "2"
+                for d in self._devices:
+                    if d["sn"] == inverter_serial_number:
+                        dev_type = d.get("devType", "2")
+                        break
+
+                # Build pending devices with devType
+                pending = []
+                for pending_inverter_serial_number in selected[1:]:
+                    p_type = "2"
+                    for d in self._devices:
+                        if d["sn"] == pending_inverter_serial_number:
+                            p_type = d.get("devType", "2")
+                            break
+                    pending.append({"sn": pending_inverter_serial_number, "devType": p_type})
+
+                return self.async_create_entry(
+                    title=f"Hanchuess {inverter_serial_number}",
+                    data={
+                        "sn": inverter_serial_number,
+                        "dev_type": dev_type,
+                        "token": self._token,
+                        "stationId": station_id,
+                        "battery_serials": battery_serials,
+                        "pending_devices": pending,
+                    },
+                )
+
         return self.async_show_form(
             step_id="select_device",
             data_schema=vol.Schema({
@@ -132,15 +170,17 @@ class HanchuessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_import(self, data: dict):
         """Handle creation of additional devices from pending list."""
-        sn = data["sn"]
-        await self.async_set_unique_id(sn)
+        inverter_serial_number = data["sn"]
+        await self.async_set_unique_id(inverter_serial_number)
         self._abort_if_unique_id_configured()
         return self.async_create_entry(
-            title=f"Hanchuess {sn}",
+            title=f"Hanchuess {inverter_serial_number}",
             data={
-                "sn": sn,
+                "sn": inverter_serial_number,
                 "dev_type": data.get("dev_type", "2"),
                 "token": data["token"],
+                "stationId": data.get("stationId"),
+                "battery_serials": data.get("battery_serials", []),
                 "pending_devices": [],
             },
         )
@@ -203,6 +243,10 @@ class HanchuessOptionsFlow(OptionsFlowWithReload):
             vol.Required(
                 CONF_STATISTICS_INTERVAL,
                 default=options.get(CONF_STATISTICS_INTERVAL, DEFAULT_STATISTICS_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
+            vol.Required(
+                CONF_BATTERY_INTERVAL,
+                default=options.get(CONF_BATTERY_INTERVAL, DEFAULT_BATTERY_INTERVAL),
             ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
             vol.Required(
                 CONF_FAST_CHARGE_DURATION,

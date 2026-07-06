@@ -41,39 +41,43 @@ class FastChargeSwitch(SwitchEntity):
     def __init__(self, client, entry):
         self._client = client
         self._entry = entry
-        self._attr_unique_id = f"{entry.data['sn']}_fast_charge"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_fast_charge"
         self._attr_is_on = False
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
 
     async def async_turn_on(self, **kwargs) -> None:
+        inverter_serial_number = self._entry.data["sn"]
         result = await self._client.async_fast_charge_discharge(
-            self._entry.data["sn"], 2, _fast_charge_duration(self._entry)
+            inverter_serial_number, 2, _fast_charge_duration(self._entry)
         )
         if result.get("success"):
             self._attr_is_on = True
             self.async_write_ha_state()
-            _LOGGER.info("Fast charge started for %s", self._entry.data["sn"])
+            _LOGGER.info("[HANCHUESS] Fast charge started for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast charge failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast charge failed: %s", result.get("msg"))
 
     async def async_turn_off(self, **kwargs) -> None:
+        inverter_serial_number = self._entry.data["sn"]
         result = await self._client.async_fast_charge_discharge(
-            self._entry.data["sn"], -2, 0
+            inverter_serial_number, -2, 0
         )
         if result.get("success"):
             self._attr_is_on = False
             self.async_write_ha_state()
-            _LOGGER.info("Fast charge stopped for %s", self._entry.data["sn"])
+            _LOGGER.info("[HANCHUESS] Fast charge stopped for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast charge stop failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast charge stop failed: %s", result.get("msg"))
 
 
 class FastDischargeSwitch(SwitchEntity):
@@ -86,36 +90,40 @@ class FastDischargeSwitch(SwitchEntity):
     def __init__(self, client, entry):
         self._client = client
         self._entry = entry
-        self._attr_unique_id = f"{entry.data['sn']}_fast_discharge"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_fast_discharge"
         self._attr_is_on = False
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
 
     async def async_turn_on(self, **kwargs) -> None:
+        inverter_serial_number = self._entry.data["sn"]
         result = await self._client.async_fast_charge_discharge(
-            self._entry.data["sn"], 3, _fast_charge_duration(self._entry)
+            inverter_serial_number, 3, _fast_charge_duration(self._entry)
         )
         if result.get("success"):
             self._attr_is_on = True
             self.async_write_ha_state()
-            _LOGGER.info("Fast discharge started for %s", self._entry.data["sn"])
+            _LOGGER.info("[HANCHUESS] Fast discharge started for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast discharge failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast discharge failed: %s", result.get("msg"))
 
     async def async_turn_off(self, **kwargs) -> None:
+        inverter_serial_number = self._entry.data["sn"]
         result = await self._client.async_fast_charge_discharge(
-            self._entry.data["sn"], -3, 0
+            inverter_serial_number, -3, 0
         )
         if result.get("success"):
             self._attr_is_on = False
             self.async_write_ha_state()
-            _LOGGER.info("Fast discharge stopped for %s", self._entry.data["sn"])
+            _LOGGER.info("[HANCHUESS] Fast discharge stopped for %s", inverter_serial_number)
         else:
-            _LOGGER.error("Fast discharge stop failed: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Fast discharge stop failed: %s", result.get("msg"))

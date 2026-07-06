@@ -12,16 +12,19 @@ from aioresponses import aioresponses
 
 from custom_components.hanchuess.api import HanchuessApiClient, ReauthRequired
 from custom_components.hanchuess.const import BASE_URL
+from custom_components.hanchuess.crypto import _decrypt_payload
 
 LOGIN = f"{BASE_URL}/gateway/identify/auth/token"
 REFRESH = f"{BASE_URL}/gateway/identify/auth/token/refresh"
 DEVICE_LIST = f"{BASE_URL}/gateway/app/ha/getDeviceList"
+STATION_DETAIL = f"{BASE_URL}/gateway/platform/station/detail"
 STATUS = f"{BASE_URL}/gateway/app/ha/getDeviceStatus"
 STATISTICS = f"{BASE_URL}/gateway/app/ha/getDeviceStatistics"
 MENU = f"{BASE_URL}/gateway/app/ha/menu"
 IOT_GET = f"{BASE_URL}/gateway/app/ha/iotGet"
 IOT_SET = f"{BASE_URL}/gateway/app/ha/iotSet"
 FAST = f"{BASE_URL}/gateway/app/ha/fastChargeDischarge"
+BMS = f"{BASE_URL}/gateway/platform/bmsInfo/queryBatteryDataDivisions"
 
 
 # ---------------------------------------------------------------------------
@@ -107,15 +110,120 @@ async def test_get_devices_empty_on_unsuccess():
 
 
 # ---------------------------------------------------------------------------
+# Station detail
+# ---------------------------------------------------------------------------
+
+async def test_get_station_detail_success(monkeypatch):
+    client = HanchuessApiClient(BASE_URL, token="t")
+
+    class _Response:
+        status = 200
+
+        async def json(self, content_type=None):
+            return {"success": True, "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]}}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _Session:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, **kwargs):
+            assert url == STATION_DETAIL
+            assert kwargs["headers"]["appPlat"] == "ha"
+            assert kwargs["headers"]["access-token"] == "t"
+            assert kwargs["headers"]["locale"] == "en"
+            assert "Content-Type" not in kwargs["headers"]
+            assert _decrypt_payload(kwargs["data"]) == {"stationId": "ST2503268043IE"}
+            return _Response()
+
+    monkeypatch.setattr(aiohttp, "ClientSession", _Session)
+
+    data = await client.async_get_station_detail("ST2503268043IE")
+    assert data == {"success": True, "data": {"bmsList": [{"sn": "B1"}, {"sn": "B2"}]}}
+
+
+async def test_get_battery_data_success(monkeypatch):
+    client = HanchuessApiClient(BASE_URL, token="t")
+
+    class _Response:
+        status = 200
+
+        async def json(self, content_type=None):
+            return {"success": True, "data": {"sn": "B1", "tBat1": "23.5"}}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _Session:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, **kwargs):
+            assert url == BMS
+            assert kwargs["headers"]["appPlat"] == "ha"
+            assert kwargs["headers"]["access-token"] == "t"
+            assert kwargs["headers"]["locale"] == "en"
+            assert "Content-Type" not in kwargs["headers"]
+            assert _decrypt_payload(kwargs["data"]) == {"deviceId": "B1"}
+            return _Response()
+
+    monkeypatch.setattr(aiohttp, "ClientSession", _Session)
+
+    data = await client.async_get_battery_data("B1")
+    assert data == {"success": True, "data": {"sn": "B1", "tBat1": "23.5"}}
+
+
+def test_headers_default_locale_is_en():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    headers = client._headers()
+    assert headers["locale"] == "en"
+
+
+def test_headers_zh_locale_is_normalized():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    headers = client._headers("zh-Hans")
+    assert headers["locale"] == "zh"
+
+
+def test_headers_unknown_locale_falls_back_to_en():
+    client = HanchuessApiClient(BASE_URL, token="t")
+    headers = client._headers("fr")
+    assert headers["locale"] == "en"
+
+
+# ---------------------------------------------------------------------------
 # Device status / statistics — success, empty, token-expired
 # ---------------------------------------------------------------------------
 
 async def test_get_device_status_success():
     client = HanchuessApiClient(BASE_URL, token="t")
     with aioresponses() as m:
-        m.post(STATUS, payload={"success": True, "data": {"batSoc": 55}})
+        m.post(
+            STATUS,
+            payload={"success": True, "data": {"batSoc": 55, "stationId": "ST2503268043IE"}},
+        )
         data = await client.async_get_device_status("SN1")
-    assert data == {"batSoc": 55}
+    assert data == {"batSoc": 55, "stationId": "ST2503268043IE"}
 
 
 async def test_get_device_status_empty_on_unsuccess():

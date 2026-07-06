@@ -16,6 +16,7 @@ Options:
   -l, --local-dir PATH         Local source directory (default: <repo>/custom_components/hanchuess)
   -r, --remote-dir PATH        Remote target directory (default: homeassistant/custom_components/hanchuess)
   -b, --backup-root PATH       Local backup root (default: <repo>/.ha-deploy-backups)
+      --skip-backup            Skip the pre-deploy backup step
   -p, --password PASSWORD      Password for non-interactive mode (requires sshpass)
       --help                   Show this help
 
@@ -26,6 +27,7 @@ Examples:
   bash tools/deploy-ha.sh --host 192.168.0.110 --user root
   bash tools/deploy-ha.sh --host 192.168.0.110 --user root --password "your_password"
   bash tools/deploy-ha.sh --host 192.168.0.110 --user root --local-dir "/c/Projects/hanchu-ess-ha/custom_components/hanchuess" --remote-dir "homeassistant/custom_components/hanchuess"
+  bash tools/deploy-ha.sh --skip-backup
 EOF
 }
 
@@ -43,6 +45,7 @@ PORT="22"
 LOCAL_DIR="$REPO_ROOT/custom_components/hanchuess"
 REMOTE_DIR="homeassistant/custom_components/hanchuess"
 BACKUP_ROOT="$REPO_ROOT/.ha-deploy-backups"
+SKIP_BACKUP="false"
 PASSWORD="${HANCHUESS_SFTP_PASSWORD:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -71,6 +74,10 @@ while [[ $# -gt 0 ]]; do
       BACKUP_ROOT="$2"
       shift 2
       ;;
+    --skip-backup)
+      SKIP_BACKUP="true"
+      shift
+      ;;
     -p|--password)
       PASSWORD="$2"
       shift 2
@@ -93,10 +100,6 @@ if [[ ! -d "$LOCAL_DIR" ]]; then
 fi
 
 BACKUP_SCRIPT="$SCRIPT_DIR/backup-ha.sh"
-if [[ ! -f "$BACKUP_SCRIPT" ]]; then
-  echo "Error: backup script not found: $BACKUP_SCRIPT" >&2
-  exit 1
-fi
 
 REMOTE_DIR_SFTP="${REMOTE_DIR//\\//}"
 LOCAL_DIR_SFTP="$(cd "$LOCAL_DIR" && pwd)"
@@ -129,17 +132,26 @@ cd "$REMOTE_DIR_SFTP"
 put -r *
 EOF
 
-BACKUP_ARGS=(
-  --host "$HOST"
-  --user "$USER"
-  --port "$PORT"
-  --remote-dir "$REMOTE_DIR"
-  --backup-root "$BACKUP_ROOT"
-)
-if [[ -n "$PASSWORD" ]]; then
-  BACKUP_ARGS+=(--password "$PASSWORD")
+if [[ "$SKIP_BACKUP" != "true" ]]; then
+  if [[ ! -f "$BACKUP_SCRIPT" ]]; then
+    echo "Error: backup script not found: $BACKUP_SCRIPT" >&2
+    exit 1
+  fi
+
+  BACKUP_ARGS=(
+    --host "$HOST"
+    --user "$USER"
+    --port "$PORT"
+    --remote-dir "$REMOTE_DIR"
+    --backup-root "$BACKUP_ROOT"
+  )
+  if [[ -n "$PASSWORD" ]]; then
+    BACKUP_ARGS+=(--password "$PASSWORD")
+  fi
+
+  bash "$BACKUP_SCRIPT" "${BACKUP_ARGS[@]}"
+else
+  echo "Skipping pre-deploy backup."
 fi
 
-bash "$BACKUP_SCRIPT" "${BACKUP_ARGS[@]}"
 run_sftp_batch "$BATCH_FILE"
-

@@ -31,6 +31,8 @@ class _FakeEntry:
             "token": "secret-token",
             "sn": "SN123",
             "account": "user@example.com",
+            "stationId": "station-1",
+            "battery_serials": ["BAT-1", "BAT-2"],
             "dev_type": "2",
         }
 
@@ -69,6 +71,7 @@ async def test_full_diagnostics_includes_all_sections():
     store = {
         "realtime": SimpleNamespace(data={"batSoc": 55, "loadPwr": 800}),
         "statistics": SimpleNamespace(data={"loadTdEe": 12.3}),
+        "battery": SimpleNamespace(data={"BAT-1": {"tBat1": 23.5, "sn": "BAT-1"}}),
         "number_limits": {"CHG_PWR_LMT": {"min": "0", "max": "5000"}},
         "startup_values": {"WORK_MODE_CMB": "1"},
     }
@@ -82,11 +85,17 @@ async def test_full_diagnostics_includes_all_sections():
         "resolved",
         "device_status",
         "statistics",
+        "battery",
         "number_limits",
         "startup_values",
     }
     assert diag["device_status"] == {"batSoc": 55, "loadPwr": 800}
     assert diag["statistics"] == {"loadTdEe": 12.3}
+    assert diag["battery"]["coordinator_present"] is True
+    assert diag["battery"]["configured_serial_count"] == 2
+    assert diag["battery"]["payload_count"] == 1
+    assert diag["battery"]["payload"]["battery_1"]["tBat1"] == 23.5
+    assert diag["battery"]["payload"]["battery_1"]["sn"] == REDACTED
     assert diag["startup_values"] == {"WORK_MODE_CMB": "1"}
 
 
@@ -100,6 +109,8 @@ async def test_sensitive_keys_redacted_in_entry():
     assert entry_data["token"] == REDACTED
     assert entry_data["sn"] == REDACTED
     assert entry_data["account"] == REDACTED
+    assert entry_data["stationId"] == REDACTED
+    assert entry_data["battery_serials"] == REDACTED
     # title is in TO_REDACT, dev_type is not.
     assert diag["entry"]["title"] == REDACTED
     assert entry_data["dev_type"] == "2"

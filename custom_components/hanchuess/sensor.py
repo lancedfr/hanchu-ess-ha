@@ -6,7 +6,14 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfPower, UnitOfEnergy
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfPower,
+    UnitOfEnergy,
+    UnitOfTemperature,
+    UnitOfElectricPotential,
+    UnitOfElectricCurrent,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -189,6 +196,71 @@ STATISTICS_SENSORS = {
     },
 }
 
+BATTERY_SENSORS = {
+    "battery_temperature_env": {
+        "key": "tEnv",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "battery_temperature_pack": {
+        "key": "tPack",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "battery_temperature_mos": {
+        "key": "tMos",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfTemperature.CELSIUS,
+    },
+    "battery_soc_pack": {
+        "key": "socPack",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+    },
+    "battery_voltage": {
+        "key": "vPack",
+        "device_class": SensorDeviceClass.VOLTAGE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricPotential.VOLT,
+    },
+    "battery_current": {
+        "key": "iPack",
+        "device_class": SensorDeviceClass.CURRENT,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfElectricCurrent.AMPERE,
+    },
+    "battery_soh_pack": {
+        "key": "sohPack",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "icon": "mdi:battery-heart-variant",
+    },
+    "battery_design_capacity": {
+        "key": "designCapacity",
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "icon": "mdi:battery-high",
+    },
+    "battery_full_capacity": {
+        "key": "capFull",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Ah",
+        "icon": "mdi:battery-arrow-up",
+    },
+    "battery_remaining_capacity": {
+        "key": "capRemain",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Ah",
+        "icon": "mdi:battery-arrow-down",
+    },
+}
+
 STATUS_MAP = {
     0: "offline",
     1: "online",
@@ -244,7 +316,7 @@ def _parse_energy_menu(menu_data: dict) -> dict:
                         for opt in options
                     ]
                 except (json.JSONDecodeError, KeyError):
-                    _LOGGER.error("Failed to parse work mode options")
+                    _LOGGER.error("[HANCHUESS] Failed to parse work mode options")
                 continue
             field = {"code": item_code, "signal": signal, "type": item_type, "name": item.get("itemName", "")}
             listener = item.get("listener")
@@ -340,12 +412,22 @@ def _derive_directional_power(value, mode):
     return 0.0 if result == 0 else result
 
 
+def _battery_temperature_count(battery_data: dict) -> int:
+    """Return the number of tBat sensors to surface for a battery."""
+    try:
+        value = int(float(battery_data.get("numBatT")))
+        return max(value, 0)
+    except (TypeError, ValueError):
+        return 4
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
     data = hass.data[DOMAIN][entry.entry_id]
     realtime = data["realtime"]
     statistics = data["statistics"]
+    battery_coordinator = data.get("battery")
     entities = []
     entities.append(DeviceStatusSensor(realtime, entry))
     for sensor_key, config in SENSORS.items():
@@ -360,6 +442,30 @@ async def async_setup_entry(
             if statistics.data.get(cond_key) != config.get("condition_value"):
                 continue
         entities.append(HanchueSensor(statistics, entry, sensor_key, config))
+    if battery_coordinator and entry.data.get("battery_serials"):
+        for battery_serial in entry.data.get("battery_serials", []):
+            battery_data = battery_coordinator.data.get(battery_serial, {})
+            for temp_index in range(1, _battery_temperature_count(battery_data) + 1):
+                sensor_key = f"battery_temperature_{temp_index}"
+                config = BATTERY_SENSORS.get(sensor_key, {
+                    "key": f"tBat{temp_index}",
+                    "name": f"Battery Temperature {temp_index}",
+                    "device_class": SensorDeviceClass.TEMPERATURE,
+                    "state_class": SensorStateClass.MEASUREMENT,
+                    "unit": UnitOfTemperature.CELSIUS,
+                })
+                entities.append(
+                    BatterySensor(battery_coordinator, entry, battery_serial, sensor_key, config)
+                )
+            for sensor_key, config in BATTERY_SENSORS.items():
+                if (
+                    sensor_key.startswith("battery_temperature_")
+                    and sensor_key.replace("battery_temperature_", "").isdigit()
+                ):
+                    continue
+                entities.append(
+                    BatterySensor(battery_coordinator, entry, battery_serial, sensor_key, config)
+                )
     async_add_entities(entities)
 
 
@@ -370,7 +476,8 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         self._entry = entry
         self._sensor_key = sensor_key
         self._config = config
-        self._attr_unique_id = f"{entry.data['sn']}_{sensor_key}"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_{sensor_key}"
         self._attr_icon = config.get("icon")
         if "name" in config:
             self._attr_name = config["name"]
@@ -387,9 +494,10 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
@@ -415,6 +523,50 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         return value
 
 
+class BatterySensor(CoordinatorEntity, SensorEntity):
+    """Battery sensor entity backed by the battery data coordinator."""
+
+    def __init__(self, coordinator, entry, battery_serial, sensor_key, config):
+        super().__init__(coordinator)
+        self._entry = entry
+        self._battery_serial = battery_serial
+        self._sensor_key = sensor_key
+        self._config = config
+        self._attr_unique_id = f"{battery_serial}_{sensor_key}"
+        self._attr_icon = config.get("icon")
+        if "name" in config:
+            self._attr_name = config["name"]
+            self._attr_has_entity_name = False
+        else:
+            self._attr_has_entity_name = True
+            self._attr_translation_key = sensor_key
+        self._attr_device_class = config.get("device_class")
+        self._attr_state_class = config.get("state_class")
+        self._attr_native_unit_of_measurement = config.get("unit")
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._battery_serial)},
+            via_device=(DOMAIN, inverter_serial_number),
+            name=f"Hanchuess Battery {self._battery_serial}",
+            manufacturer="Hanchu",
+            model="Battery Pack",
+        )
+
+    @property
+    def native_value(self):
+        battery_data = self.coordinator.data.get(self._battery_serial, {})
+        value = battery_data.get(self._config["key"])
+        if value is None:
+            return None
+        try:
+            return round(float(value), 3)
+        except (ValueError, TypeError):
+            return value
+
+
 class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "device_status"
@@ -423,16 +575,18 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._entry = entry
-        self._attr_unique_id = f"{entry.data['sn']}_device_status"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_device_status"
         self._work_mode_options = []
         self._energy_fields = []
         self._menu_loaded = False
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
@@ -451,8 +605,9 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         fast_chg = self.coordinator.data.get("deviceStatusOfTestFastChg")
         remain = self.coordinator.data.get("testTimeRemain")
+        inverter_serial_number = self._entry.data["sn"]
         attrs = {
-            "sn": self._entry.data["sn"],
+            "sn": inverter_serial_number,
             "energy_fields": self._energy_fields,
             "work_mode_options": self._work_mode_options,
         }
@@ -473,8 +628,10 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
 
     async def _refresh_menu(self) -> None:
         language = self.hass.config.language or "en"
-        sn = self._entry.data["sn"]
-        menu_data = await self.coordinator.client.async_get_menu(sn, language)
+        inverter_serial_number = self._entry.data["sn"]
+        menu_data = await self.coordinator.client.async_get_menu(
+            inverter_serial_number, language
+        )
         parsed = _parse_energy_menu(menu_data)
         if parsed["work_mode_options"]:
             self._work_mode_options = parsed["work_mode_options"]

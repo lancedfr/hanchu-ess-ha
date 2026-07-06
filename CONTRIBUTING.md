@@ -110,6 +110,27 @@ pytest -s                                       # show print()/log output
 On Windows, `pytest -rs` is a quick way to confirm the config-flow tests skipped
 for the expected reason rather than erroring.
 
+### Crypto debug utility
+
+For local AES payload debugging, use the CLI helper in `tools/crypto_tool.py`.
+It uses the integration's default key/IV unless you override them.
+
+```bash
+py tools/crypto_tool.py encrypt '{"sn":"SN123456","devType":"2"}'
+py tools/crypto_tool.py decrypt 'BASE64_CIPHERTEXT'
+py tools/crypto_tool.py decrypt --pretty 'BASE64_CIPHERTEXT'
+```
+
+You can also pipe JSON or ciphertext through stdin:
+
+```powershell
+Get-Content payload.json | py tools/crypto_tool.py encrypt
+Get-Content cipher.txt | py tools/crypto_tool.py decrypt --pretty
+```
+
+Optional `--key-text` and `--iv-text` overrides are available when you need to
+test non-default material.
+
 ### Running the live integration test
 
 ```bash
@@ -293,6 +314,9 @@ remote integration directory to a timestamped local backup folder under
 `.ha-deploy-backups/` at the repo root. Override backup location with
 `--backup-root`.
 
+If you want to skip that pre-deploy backup for a one-off deploy, pass
+`--skip-backup` to `tools/deploy-ha.sh`.
+
 Authentication prompts normally at runtime. For non-interactive runs, set
 `HANCHUESS_SFTP_PASSWORD` or pass `--password` (requires `sshpass`).
 
@@ -313,3 +337,30 @@ bash tools/restore-ha.sh \
   --restore-from "/c/Projects/hanchu-ess-ha/.ha-deploy-backups/20260703-230000"
 ```
 
+## Automated release script for maintainers with permission only (Git Bash)
+
+You can run the release flow with:
+
+```bash
+bash tools/release.sh --version X.Y.Z --update-changelog true
+```
+
+This script automates steps 2–5 above:
+
+- bumps `custom_components/hanchuess/manifest.json` to `X.Y.Z`,
+- optionally updates `CHANGELOG.md` when `--update-changelog true`,
+- creates `Release vX.Y.Z` commit and local `vX.Y.Z` tag.
+
+By default it **does not push** to remote; it prints explicit push commands so
+you can confirm before triggering the release workflow:
+
+```bash
+git push origin main
+git push origin vX.Y.Z
+```
+
+To push automatically from the script, pass:
+
+```bash
+bash tools/release.sh --version X.Y.Z --update-changelog true --auto-push true
+```

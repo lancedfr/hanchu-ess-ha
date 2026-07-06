@@ -3,13 +3,19 @@ import logging
 import os
 import asyncio
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.components import websocket_api
+from homeassistant.exceptions import ConfigEntryNotReady
 import homeassistant.helpers.config_validation as cv
 from .const import DOMAIN, PLATFORMS, BASE_URL
 from .api import HanchuessApiClient
-from .coordinator import HanchuessRealtimeCoordinator, HanchuessStatisticsCoordinator
+from .battery import merge_battery_serials
+from .coordinator import (
+    HanchuessRealtimeCoordinator,
+    HanchuessStatisticsCoordinator,
+    HanchuessBatteryCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +29,81 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 CARD_URL = "/hacsfiles/hanchuess/hanchuess-energy-card.js"
+
+
+async def _async_initial_refresh(coordinator, entry: ConfigEntry) -> None:
+    """Run the first coordinator refresh in a state-safe way.
+
+    Home Assistant requires async_config_entry_first_refresh() to be called only
+    while the entry is SETUP_IN_PROGRESS. Some test setups call async_setup_entry
+    directly with NOT_LOADED entries, so fall back to async_refresh() there.
+    """
+    if entry.state is ConfigEntryState.SETUP_IN_PROGRESS:
+        await coordinator.async_config_entry_first_refresh()
+        return
+
+    await coordinator.async_refresh()
+    if not coordinator.last_update_success:
+        raise ConfigEntryNotReady(
+            f"Initial coordinator refresh failed for {coordinator.name}"
+        )
+
+
+async def _resolve_station_id(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    client: HanchuessApiClient,
+    device_status: dict | None = None,
+) -> str | None:
+    """Return the stored station ID, backfilling it from device status if needed.
+    resolve_station_id(...) checks entry.data["stationId"]. If it already exists, it returns it immediately.
+    If missing, it uses a provided device_status payload (when available) or calls
+    client.async_get_device_status(sn, language), pulls stationId from the response,
+    writes it back into the config entry (async_update_entry), and returns it (or None if unavailable).
+    """
+    station_id = entry.data.get("stationId")
+    if station_id:
+        return station_id
+
+    if device_status is None:
+        language = hass.config.language or "en"
+        device_status = await client.async_get_device_status(entry.data["sn"], language)
+    station_id = device_status.get("stationId") if device_status else None
+    if station_id:
+        hass.config_entries.async_update_entry(
+            entry,
+            data={**entry.data, "stationId": station_id},
+        )
+    return station_id
+
+
+async def _refresh_battery_serials(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    client: HanchuessApiClient,
+    station_id: str | None,
+) -> list[str]:
+    """Refresh stored battery serials from the latest station detail.
+    refresh_battery_serials(...) starts from stored battery_serials. If there is no station_id, it returns
+    existing serials unchanged. Otherwise, it fetches station detail, merges discovered battery serials
+    with existing ones via merge_battery_serials, and if the merged list is changed, it updates all Hanchu
+    entries that share that same stationId so they all store the same battery_serials. It finally returns
+    the merged serial list."""
+    existing_serials = entry.data.get("battery_serials", [])
+    if not station_id:
+        return existing_serials
+
+    language = hass.config.language or "en"
+    station_detail = await client.async_get_station_detail(station_id, language)
+    merged_serials = merge_battery_serials(existing_serials, station_detail)
+    if merged_serials != existing_serials:
+        for other_entry in hass.config_entries.async_entries(DOMAIN):
+            if other_entry.data.get("stationId") == station_id:
+                hass.config_entries.async_update_entry(
+                    other_entry,
+                    data={**other_entry.data, "battery_serials": merged_serials},
+                )
+    return merged_serials
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -55,19 +136,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 })
 @websocket_api.async_response
 async def ws_iot_get(hass, connection, msg):
-    sn = msg["sn"]
+    inverter_serial_number = msg["sn"]
     dev_type = msg["dev_type"]
     keys = msg["keys"]
     target_client = None
     for eid, data in hass.data[DOMAIN].items():
         if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == sn:
+            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                 target_client = data["realtime"].client
                 break
     if not target_client:
-        connection.send_error(msg["id"], "not_found", f"Device {sn} not found")
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
         return
-    result = await target_client.async_iot_get(sn, dev_type, keys)
+    result = await target_client.async_iot_get(inverter_serial_number, dev_type, keys)
     connection.send_result(msg["id"], result)
 
 
@@ -79,7 +162,7 @@ async def ws_iot_get(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_iot_set(hass, connection, msg):
-    sn = msg["sn"]
+    inverter_serial_number = msg["sn"]
     dev_type = msg["dev_type"]
     value = msg["value"]
     for k, v in value.items():
@@ -91,13 +174,17 @@ async def ws_iot_set(hass, connection, msg):
     target_client = None
     for eid, data in hass.data[DOMAIN].items():
         if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == sn:
+            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                 target_client = data["realtime"].client
                 break
     if not target_client:
-        connection.send_error(msg["id"], "not_found", f"Device {sn} not found")
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
         return
-    result = await target_client.async_device_control(sn, dev_type, value)
+    result = await target_client.async_device_control(
+        inverter_serial_number, dev_type, value
+    )
     if result.get("success"):
         connection.send_result(msg["id"], result.get("data", {}))
     else:
@@ -112,17 +199,21 @@ async def ws_iot_set(hass, connection, msg):
 })
 @websocket_api.async_response
 async def ws_fast_charge(hass, connection, msg):
-    sn = msg["sn"]
+    inverter_serial_number = msg["sn"]
     target_client = None
     for eid, data in hass.data[DOMAIN].items():
         if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == sn:
+            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                 target_client = data["realtime"].client
                 break
     if not target_client:
-        connection.send_error(msg["id"], "not_found", f"Device {sn} not found")
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
         return
-    result = await target_client.async_fast_charge_discharge(sn, msg["act"], msg["duration"])
+    result = await target_client.async_fast_charge_discharge(
+        inverter_serial_number, msg["act"], msg["duration"]
+    )
     if result.get("success"):
         connection.send_result(msg["id"], result.get("data", {}))
     else:
@@ -156,14 +247,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = hass.data[DOMAIN]["_client"]
 
     coordinator = HanchuessRealtimeCoordinator(hass, entry, client)
-    await coordinator.async_config_entry_first_refresh()
+    await _async_initial_refresh(coordinator, entry)
 
     stats_coordinator = HanchuessStatisticsCoordinator(hass, entry, client)
-    await stats_coordinator.async_config_entry_first_refresh()
+    await _async_initial_refresh(stats_coordinator, entry)
+
+    station_id = await _resolve_station_id(hass, entry, client, coordinator.data)
+    battery_serials = await _refresh_battery_serials(hass, entry, client, station_id)
+
+    battery_coordinator = None
+    if battery_serials:
+        battery_coordinator = HanchuessBatteryCoordinator(hass, entry, client)
+        await _async_initial_refresh(battery_coordinator, entry)
 
     # Fetch menu to get device-specific min/max values for number entities
     language = hass.config.language or "en"
-    sn = entry.data["sn"]
+    inverter_serial_number = entry.data["sn"]
     number_limits = {
         "CHG_PWR_LMT": {"min": 0, "max": 5000},
         "DSCHG_PWR_LMT": {"min": 0, "max": 5000},
@@ -172,7 +271,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "DTU_AC_CHG_SOC_LMT": {"min": 20, "max": 100},
     }
     try:
-        menu_data = await client.async_get_menu(sn, language)
+        menu_data = await client.async_get_menu(inverter_serial_number, language)
         energy = menu_data.get("data", {}).get("energy", {})
         for group in energy.get("items", []):
             for item in group:
@@ -195,7 +294,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         startup_values = await asyncio.wait_for(
             client.async_iot_get(
-                sn,
+                inverter_serial_number,
                 "2",
                 [
                     "WORK_MODE_CMB",
@@ -223,6 +322,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "realtime": coordinator,
         "statistics": stats_coordinator,
+        "battery": battery_coordinator,
         "number_limits": number_limits,
         "startup_values": startup_values,
     }
@@ -230,20 +330,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     async def handle_device_control(call: ServiceCall):
-        sn = call.data["sn"]
+        inverter_serial_number = call.data["sn"]
         dev_type = call.data["dev_type"]
         value = call.data["value"]
-        _LOGGER.info("[HANCHUESS] service device_control: %s %s", sn, value)
+        _LOGGER.info(
+            "[HANCHUESS] service device_control: %s %s",
+            inverter_serial_number,
+            value,
+        )
         target_client = None
         for eid, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and "realtime" in data:
-                if data["realtime"].entry.data.get("sn") == sn:
+                if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                     target_client = data["realtime"].client
                     break
         if not target_client:
-            _LOGGER.error("[HANCHUESS] device_control: device %s not found", sn)
+            _LOGGER.error(
+                "[HANCHUESS] device_control: device %s not found",
+                inverter_serial_number,
+            )
             return
-        result = await target_client.async_device_control(sn, dev_type, value)
+        result = await target_client.async_device_control(
+            inverter_serial_number, dev_type, value
+        )
         if not result.get("success"):
             _LOGGER.error("[HANCHUESS] device_control failed: %s", result.get("msg"))
 
@@ -253,15 +362,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     async def handle_fast_charge(call: ServiceCall):
-        sn = call.data.get("sn")
+        inverter_serial_number = call.data.get("sn")
 
-        if not sn:
+        if not inverter_serial_number:
             for eid, data in hass.data[DOMAIN].items():
                 if isinstance(data, dict) and "realtime" in data:
-                    sn = data["realtime"].entry.data.get("sn")
+                    inverter_serial_number = data["realtime"].entry.data.get("sn")
                     break
 
-        if not sn:
+        if not inverter_serial_number:
             _LOGGER.error("[HANCHUESS] fast_charge: No inverter serial found")
             return
 
@@ -271,15 +380,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         target_client = None
         for eid, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and "realtime" in data:
-                if data["realtime"].entry.data.get("sn") == sn:
+                if data["realtime"].entry.data.get("sn") == inverter_serial_number:
                     target_client = data["realtime"].client
                     break
 
         if not target_client:
-            _LOGGER.error("[HANCHUESS] fast_charge: device %s not found", sn)
+            _LOGGER.error(
+                "[HANCHUESS] fast_charge: device %s not found",
+                inverter_serial_number,
+            )
             return
 
-        result = await target_client.async_fast_charge_discharge(sn, act, duration)
+        result = await target_client.async_fast_charge_discharge(
+            inverter_serial_number, act, duration
+        )
 
         if not result.get("success"):
             _LOGGER.error("[HANCHUESS] fast_charge failed: %s", result.get("msg"))
@@ -306,6 +420,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "sn": item["sn"],
                     "dev_type": item.get("devType", "2"),
                     "token": entry.data["token"],
+                    "stationId": entry.data.get("stationId"),
+                    "battery_serials": entry.data.get("battery_serials", []),
                 },
             )
         new_data = {k: v for k, v in entry.data.items() if k != "pending_devices"}

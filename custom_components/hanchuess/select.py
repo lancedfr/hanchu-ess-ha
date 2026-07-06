@@ -1,10 +1,12 @@
 """Select platform for Hanchuess - Work Mode control."""
 import logging
+
 from homeassistant.components.select import SelectEntity
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,7 +41,8 @@ class WorkModeSelect(SelectEntity):
     def __init__(self, client, entry, startup_values):
         self._client = client
         self._entry = entry
-        self._attr_unique_id = f"{entry.data['sn']}_work_mode"
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_work_mode"
         self._attr_current_option = None
 
         # Set initial value from startup read
@@ -51,9 +54,10 @@ class WorkModeSelect(SelectEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
         return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.data["sn"])},
-            name=f"Hanchuess {self._entry.data['sn']}",
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
             manufacturer="Hanchu",
             model="ESS Device",
         )
@@ -62,16 +66,17 @@ class WorkModeSelect(SelectEntity):
         """Send work mode change to device."""
         value = WORK_MODES.get(option)
         if value is None:
-            _LOGGER.error("Unknown work mode: %s", option)
+            _LOGGER.error("[HANCHUESS] Unknown work mode: %s", option)
             return
+        inverter_serial_number = self._entry.data["sn"]
         result = await self._client.async_device_control(
-            self._entry.data["sn"],
+            inverter_serial_number,
             "2",
             {"WORK_MODE_CMB": value},
         )
         if result.get("success"):
             self._attr_current_option = option
             self.async_write_ha_state()
-            _LOGGER.info("Work mode set to %s", option)
+            _LOGGER.info("[HANCHUESS] Work mode set to %s", option)
         else:
-            _LOGGER.error("Failed to set work mode: %s", result.get("msg"))
+            _LOGGER.error("[HANCHUESS] Failed to set work mode: %s", result.get("msg"))

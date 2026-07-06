@@ -13,6 +13,10 @@ pytest.importorskip("homeassistant")
 
 from custom_components.hanchuess import time as time_mod
 from custom_components.hanchuess.const import DEFAULT_FAST_CHARGE_DURATION
+from custom_components.hanchuess.battery import (
+    extract_battery_serials,
+    merge_battery_serials,
+)
 from custom_components.hanchuess.sensor import (
     SENSORS,
     HanchueSensor,
@@ -20,11 +24,24 @@ from custom_components.hanchuess.sensor import (
 )
 from custom_components.hanchuess.switch import _fast_charge_duration
 from custom_components.hanchuess.time import TIME_SLOTS, HanchuessTimeSlot
+from custom_components.hanchuess.sensor import (
+    BatterySensor,
+    BATTERY_SENSORS,
+    _battery_temperature_count,
+)
 
 
 class _FakeEntry:
-    def __init__(self, sn="SN1"):
-        self.data = {"sn": sn}
+    def __init__(self, inverter_serial_number="SN1"):
+        self.data = {"sn": inverter_serial_number, "stationId": "ST2503268043IE"}
+
+
+class _FakeBatteryCoordinator:
+    def __init__(self, battery_serial_number="B1", data=None):
+        self.data = {
+            battery_serial_number: data
+            or {"tBat1": "23.5", "socPack": "62.9", "vPack": "52.71", "iPack": "-4.14"}
+        }
 
 
 class _FakeOptionsEntry:
@@ -44,6 +61,47 @@ def _make_sensor(config, value, unit=None):
         data[config["unit_key"]] = unit
     coordinator.data = data
     return HanchueSensor(coordinator, _FakeEntry(), "test_sensor", config)
+
+
+def _make_battery_sensor(key, value="23.5", battery_serial_number="B1"):
+    coordinator = _FakeBatteryCoordinator(
+        battery_serial_number, {BATTERY_SENSORS[key]["key"]: value}
+    )
+    return BatterySensor(coordinator, _FakeEntry(), battery_serial_number, key, BATTERY_SENSORS[key])
+
+
+def _make_battery_temperature_sensor(index, value="23.5", battery_serial_number="B1"):
+    sensor_key = f"battery_temperature_{index}"
+    config = {
+        "key": f"tBat{index}",
+        "name": f"Battery Temperature {index}",
+        "device_class": "temperature",
+        "state_class": "measurement",
+        "unit": "degC",
+    }
+    coordinator = _FakeBatteryCoordinator(
+        battery_serial_number, {config["key"]: value}
+    )
+    return BatterySensor(coordinator, _FakeEntry(), battery_serial_number, sensor_key, config)
+
+
+def test_extract_battery_serials_reads_bms_list():
+    station_detail = {
+        "data": {
+            "bmsList": [
+                {"sn": "B1"},
+                {"sn": ""},
+                {"sn": "B2"},
+                {},
+            ]
+        }
+    }
+    assert extract_battery_serials(station_detail) == ["B1", "B2"]
+
+
+def test_merge_battery_serials_keeps_existing_and_adds_new():
+    station_detail = {"data": {"bmsList": [{"sn": "B2"}, {"sn": "B3"}]}}
+    assert merge_battery_serials(["B1", "B2"], station_detail) == ["B1", "B2", "B3"]
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +241,52 @@ def test_auto_watt_missing_value_returns_none():
 def test_scale_factor_applied():
     s = _make_sensor({"key": "batSoc", "scale": 100}, 0.55)
     assert s.native_value == 55.0
+
+
+def test_battery_temperature_sensor_uses_device_data():
+    s = _make_battery_temperature_sensor(1, "23.5")
+    assert s.native_value == 23.5
+
+
+def test_battery_soc_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_soc_pack", "62.9")
+    assert s.native_value == 62.9
+
+
+def test_battery_voltage_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_voltage", "52.71")
+    assert s.native_value == 52.71
+
+
+def test_battery_soh_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_soh_pack", "100")
+    assert s.native_value == 100.0
+
+
+def test_battery_design_capacity_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_design_capacity", "9.40")
+    assert s.native_value == 9.4
+
+
+def test_battery_full_capacity_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_full_capacity", "184.00")
+    assert s.native_value == 184.0
+
+
+def test_battery_remaining_capacity_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_remaining_capacity", "129.72")
+    assert s.native_value == 129.72
+
+
+def test_battery_temperature_count_uses_num_bat_t():
+    assert _battery_temperature_count({"numBatT": 4}) == 4
+    assert _battery_temperature_count({"numBatT": "3"}) == 3
+    assert _battery_temperature_count({"numBatT": "0"}) == 0
+
+
+def test_battery_temperature_count_falls_back_to_legacy_default():
+    assert _battery_temperature_count({}) == 4
+    assert _battery_temperature_count({"numBatT": "bad"}) == 4
 
 
 # ---------------------------------------------------------------------------
