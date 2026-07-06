@@ -23,6 +23,7 @@ const HANCHUESS_I18N = {
     load_data: "Load",
     submit: "Set",
     offline: "Device offline, cannot configure",
+    entity_unavailable: "Entity unavailable, try again",
     loading: "Loading...",
     load_success: "Data loaded",
     load_fail: "Load failed: ",
@@ -69,6 +70,7 @@ const HANCHUESS_I18N = {
     load_data: "获取数据",
     submit: "设定",
     offline: "设备离线，无法设置",
+    entity_unavailable: "实体不可用，请重试",
     loading: "加载中...",
     load_success: "数据加载成功",
     load_fail: "加载失败: ",
@@ -1127,30 +1129,35 @@ class HanchuessEnergyCard extends HTMLElement {
   async _loadData() {
     const loadBtn = this.shadowRoot.getElementById("load_btn");
     const statusMsg = this.shadowRoot.getElementById("status_msg");
+
+    const state = this._hass.states[this._config.entity];
+    if (!state) {
+      statusMsg.textContent = _t(this._hass, 'entity_unavailable');
+      statusMsg.className = "status error";
+      return;
+    }
+
     loadBtn.disabled = true;
     statusMsg.textContent = _t(this._hass, 'loading');
     statusMsg.className = "status";
 
-    const state = this._hass.states[this._config.entity];
-    if (!state) return;
-
-    const keys = [];
-    const fields = state.attributes.energy_fields || [];
-    for (const field of fields) {
-      if (field.signal) {
-        field.signal.split(",").forEach(s => { if (s) keys.push(s); });
-      }
-    }
-
-    const wmOptions = state.attributes.work_mode_options || [];
-    if (wmOptions.length > 0) {
-      keys.push(wmOptions[0].signal || "WORK_MODE_CMB");
-    }
-    // Only request FLAG_ENABLE_CYCLE if there are collapse (82/83) fields
-    const hasCollapse = fields.some(f => f.type === "collapse");
-    if (hasCollapse && !keys.includes("FLAG_ENABLE_CYCLE")) keys.push("FLAG_ENABLE_CYCLE");
-
     try {
+      const keys = [];
+      const fields = state.attributes.energy_fields || [];
+      for (const field of fields) {
+        if (field.signal) {
+          field.signal.split(",").forEach(s => { if (s) keys.push(s); });
+        }
+      }
+
+      const wmOptions = state.attributes.work_mode_options || [];
+      if (wmOptions.length > 0) {
+        keys.push(wmOptions[0].signal || "WORK_MODE_CMB");
+      }
+      // Only request FLAG_ENABLE_CYCLE if there are collapse (82/83) fields
+      const hasCollapse = fields.some(f => f.type === "collapse");
+      if (hasCollapse && !keys.includes("FLAG_ENABLE_CYCLE")) keys.push("FLAG_ENABLE_CYCLE");
+
       const result = await this._hass.callWS({
         type: "hanchuess/iot_get",
         sn: this._config.sn,
@@ -1200,10 +1207,10 @@ class HanchuessEnergyCard extends HTMLElement {
     } catch (err) {
       statusMsg.textContent = _t(this._hass, 'load_fail') + err.message;
       statusMsg.className = "status error";
+    } finally {
+      loadBtn.disabled = false;
+      setTimeout(() => { statusMsg.textContent = ""; }, 3000);
     }
-
-    loadBtn.disabled = false;
-    setTimeout(() => { statusMsg.textContent = ""; }, 3000);
   }
 
   // Returns array of {start, end} in minutes (0~1439) for all visible slots in a group
@@ -1284,222 +1291,226 @@ class HanchuessEnergyCard extends HTMLElement {
   async _submit() {
     const submitBtn = this.shadowRoot.getElementById("submit_btn");
     const statusMsg = this.shadowRoot.getElementById("status_msg");
+
+    const state = this._hass.states[this._config.entity];
+    if (!state) {
+      statusMsg.textContent = _t(this._hass, 'entity_unavailable');
+      statusMsg.className = "status error";
+      return;
+    }
+
     submitBtn.disabled = true;
     statusMsg.textContent = _t(this._hass, 'submitting');
     statusMsg.className = "status";
 
-    const state = this._hass.states[this._config.entity];
-    if (!state) return;
+    try {
+      const inverterSerialNumber = this._config.sn;
+      const valueMap = {};
 
-    const inverterSerialNumber = this._config.sn;
-    const valueMap = {};
+      // Check charging/discharging time overlap before submitting
+      if (this._checkTimeOverlap()) {
+        statusMsg.textContent = _t(this._hass, 'time_overlap');
+        statusMsg.className = "status error";
+        return;
+      }
 
-    // Check charging/discharging time overlap before submitting
-    if (this._checkTimeOverlap()) {
-      statusMsg.textContent = _t(this._hass, 'time_overlap');
-      statusMsg.className = "status error";
-      submitBtn.disabled = false;
-      setTimeout(() => { statusMsg.textContent = ""; }, 4000);
-      return;
-    }
+      // Check work mode change
+      const wmOptions = state.attributes.work_mode_options || [];
+      const wmSignal = wmOptions.length > 0 ? (wmOptions[0].signal || "WORK_MODE_CMB") : "WORK_MODE_CMB";
+      const selectEl = this.shadowRoot.getElementById("work_mode");
+      const selectedLabel = selectEl ? selectEl.value : "";
 
-    // Check work mode change
-    const wmOptions = state.attributes.work_mode_options || [];
-    const wmSignal = wmOptions.length > 0 ? (wmOptions[0].signal || "WORK_MODE_CMB") : "WORK_MODE_CMB";
-    const selectEl = this.shadowRoot.getElementById("work_mode");
-    const selectedLabel = selectEl ? selectEl.value : "";
-
-    if (selectedLabel) {
-      for (const opt of wmOptions) {
-        if (opt.label === selectedLabel) {
-          const newVal = String(opt.value);
-          if (newVal !== String(this._originalValues[wmSignal] || "")) {
-            valueMap[wmSignal] = newVal;
+      if (selectedLabel) {
+        for (const opt of wmOptions) {
+          if (opt.label === selectedLabel) {
+            const newVal = String(opt.value);
+            if (newVal !== String(this._originalValues[wmSignal] || "")) {
+              valueMap[wmSignal] = newVal;
+            }
+            break;
           }
-          break;
         }
       }
-    }
 
-    // Check visible field changes
-    const container = this.shadowRoot.getElementById("dynamic_fields");
-    const visibleFields = container.querySelectorAll(".dynamic-field.visible");
-    const changedSignals = new Set();
+      // Check visible field changes
+      const container = this.shadowRoot.getElementById("dynamic_fields");
+      const visibleFields = container.querySelectorAll(".dynamic-field.visible");
+      const changedSignals = new Set();
 
-    // First pass: find changed signals (for non-collapse fields)
-    visibleFields.forEach(fieldEl => {
-      if (fieldEl.dataset.collapse) return;
-      const inputs = fieldEl.querySelectorAll("input[data-signal], select[data-signal]");
-      inputs.forEach(input => {
-        const signal = input.dataset.signal;
-        if (!signal) return;
-        let newVal;
-        if (input.classList.contains("time-input")) {
-          const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
-          if (fmt.includes("HH") || fmt.includes("hh")) {
-            newVal = this._timeToSignal(input.value || "00:00");
-          } else {
-            newVal = (input.value || "00:00").replace(":", "");
-          }
-        } else if (input.type === "checkbox") {
-          newVal = input.checked ? (input.dataset.on || "1") : (input.dataset.off || "0");
-        } else if (signal === "MIN_THRESH_CHG_DUR") {
-          newVal = String(Number(input.value) * 60);
-        } else {
-          newVal = input.value;
-        }
-        if (!newVal && !this._originalValues[signal]) return;
-        let origVal = String(this._originalValues[signal] || "");
-        if (input.type === "number" && input.dataset.step) {
-          const step = parseFloat(input.dataset.step);
-          const origNum = Number(origVal);
-          if (!isNaN(origNum)) origVal = step < 1 ? String(parseFloat(origNum.toFixed(String(step).split(".")[1]?.length || 2))) : String(Math.round(origNum));
-        }
-        if (newVal !== origVal) changedSignals.add(signal);
-      });
-    });
-
-    // Also check deleted time slots (hidden but were visible before, only type=6)
-    const allTimeSlots = container.querySelectorAll("[data-time-group][data-time-index]");
-    allTimeSlots.forEach(slot => {
-      if (slot.dataset.timeHidden === "true") {
-        const inputs = slot.querySelectorAll("input.time-input");
+      // First pass: find changed signals (for non-collapse fields)
+      visibleFields.forEach(fieldEl => {
+        if (fieldEl.dataset.collapse) return;
+        const inputs = fieldEl.querySelectorAll("input[data-signal], select[data-signal]");
         inputs.forEach(input => {
           const signal = input.dataset.signal;
-          if (signal && this._originalValues[signal] && String(this._originalValues[signal]) !== "0") {
-            changedSignals.add(signal);
-          }
-        });
-      }
-    });
-
-    // Second pass: collect non-collapse values
-    visibleFields.forEach(fieldEl => {
-      if (fieldEl.dataset.collapse) return;
-      const inputs = fieldEl.querySelectorAll("input[data-signal], select[data-signal]");
-      const fieldSignals = Array.from(inputs).map(i => i.dataset.signal).filter(Boolean);
-      const hasChange = fieldSignals.some(s => changedSignals.has(s));
-      if (!hasChange) return;
-      inputs.forEach(input => {
-        const signal = input.dataset.signal;
-        if (!signal) return;
-        if (input.classList.contains("time-input")) {
-          const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
-          if (fmt.includes("HH") || fmt.includes("hh")) {
-            valueMap[signal] = this._timeToSignal(input.value || "00:00");
+          if (!signal) return;
+          let newVal;
+          if (input.classList.contains("time-input")) {
+            const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
+            if (fmt.includes("HH") || fmt.includes("hh")) {
+              newVal = this._timeToSignal(input.value || "00:00");
+            } else {
+              newVal = (input.value || "00:00").replace(":", "");
+            }
+          } else if (input.type === "checkbox") {
+            newVal = input.checked ? (input.dataset.on || "1") : (input.dataset.off || "0");
+          } else if (signal === "MIN_THRESH_CHG_DUR") {
+            newVal = String(Number(input.value) * 60);
           } else {
-            valueMap[signal] = (input.value || "00:00").replace(":", "");
+            newVal = input.value;
           }
-        } else if (signal === "MIN_THRESH_CHG_DUR") {
-          valueMap[signal] = String(Number(input.value) * 60);
-        } else {
-          valueMap[signal] = input.value;
-        }
-      });
-    });
-
-    // Collect ALL collapse card (82/83) array values - must submit all together
-    const collapseFields = container.querySelectorAll(".dynamic-field.visible[data-collapse]");
-    if (collapseFields.length > 0) {
-      let hasAnyChange = false;
-      const collapseValues = {};
-      collapseFields.forEach(fieldEl => {
-        const sig = fieldEl.dataset.signal;
-        if (!sig) return;
-        const arrEls = fieldEl.querySelectorAll("[data-arr-signal]");
-        let origArr;
-        try { origArr = JSON.parse(this._originalValues[sig] || "[]"); } catch { origArr = []; }
-        const newArr = [...origArr];
-        arrEls.forEach(el => {
-          const idx = parseInt(el.dataset.arrIndex);
-          if (isNaN(idx)) return;
-          let val;
-          if (el.classList.contains("time-input") || el.dataset.arrFmt === "time") {
-            val = (el.value || "00:00").replace(":", "");
-          } else if (el.type === "number") {
-            val = el.value;
-          } else {
-            val = el.tagName === "SELECT" ? Number(el.value) : el.value;
+          if (!newVal && !this._originalValues[signal]) return;
+          let origVal = String(this._originalValues[signal] || "");
+          if (input.type === "number" && input.dataset.step) {
+            const step = parseFloat(input.dataset.step);
+            const origNum = Number(origVal);
+            if (!isNaN(origNum)) origVal = step < 1 ? String(parseFloat(origNum.toFixed(String(step).split(".")[1]?.length || 2))) : String(Math.round(origNum));
           }
-          newArr[idx] = val;
+          if (newVal !== origVal) changedSignals.add(signal);
         });
-        collapseValues[sig] = JSON.stringify(newArr);
-        if (collapseValues[sig] !== JSON.stringify(origArr)) hasAnyChange = true;
       });
-      // Check FLAG_ENABLE_CYCLE change
-      this._collectEnableCycle(container, collapseValues);
-      if (collapseValues["FLAG_ENABLE_CYCLE"] || hasAnyChange) {
-        // Submit all TCT + FLAG_ENABLE_CYCLE together
-        Object.assign(valueMap, collapseValues);
-        if (!valueMap["FLAG_ENABLE_CYCLE"]) {
-          valueMap["FLAG_ENABLE_CYCLE"] = this._originalValues["FLAG_ENABLE_CYCLE"] || "[0,0,0,0,0,0]";
-        }
-      }
-    }
 
-    // Collect deleted time slots (send 0)
-    allTimeSlots.forEach(slot => {
-      if (slot.dataset.timeHidden === "true") {
-        const inputs = slot.querySelectorAll("input.time-input");
-        const hasOrig = Array.from(inputs).some(inp => {
-          const sig = inp.dataset.signal;
-          return sig && this._originalValues[sig] && String(this._originalValues[sig]) !== "0";
-        });
-        if (hasOrig) {
-          inputs.forEach(inp => {
-            const sig = inp.dataset.signal;
-            if (sig) valueMap[sig] = "0";
+      // Also check deleted time slots (hidden but were visible before, only type=6)
+      const allTimeSlots = container.querySelectorAll("[data-time-group][data-time-index]");
+      allTimeSlots.forEach(slot => {
+        if (slot.dataset.timeHidden === "true") {
+          const inputs = slot.querySelectorAll("input.time-input");
+          inputs.forEach(input => {
+            const signal = input.dataset.signal;
+            if (signal && this._originalValues[signal] && String(this._originalValues[signal]) !== "0") {
+              changedSignals.add(signal);
+            }
           });
         }
-      }
-    });
-
-    if (Object.keys(valueMap).length === 0) {
-      statusMsg.textContent = _t(this._hass, 'no_change');
-      statusMsg.className = "status";
-      submitBtn.disabled = false;
-      setTimeout(() => { statusMsg.textContent = ""; }, 2000);
-      return;
-    }
-
-    try {
-      await this._hass.callWS({
-        type: "hanchuess/iot_set",
-        sn: sn,
-        dev_type: "2",
-        value: valueMap,
       });
 
-      Object.assign(this._originalValues, valueMap);
-
-      // Sync all visible field values to _originalValues
-      container.querySelectorAll("input[data-signal]").forEach(input => {
-        const signal = input.dataset.signal;
-        if (!signal || !input.value) return;
-        if (input.classList.contains("time-input")) {
-          const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
-          if (fmt.includes("HH") || fmt.includes("hh")) {
-            this._originalValues[signal] = this._timeToSignal(input.value || "00:00");
+      // Second pass: collect non-collapse values
+      visibleFields.forEach(fieldEl => {
+        if (fieldEl.dataset.collapse) return;
+        const inputs = fieldEl.querySelectorAll("input[data-signal], select[data-signal]");
+        const fieldSignals = Array.from(inputs).map(i => i.dataset.signal).filter(Boolean);
+        const hasChange = fieldSignals.some(s => changedSignals.has(s));
+        if (!hasChange) return;
+        inputs.forEach(input => {
+          const signal = input.dataset.signal;
+          if (!signal) return;
+          if (input.classList.contains("time-input")) {
+            const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
+            if (fmt.includes("HH") || fmt.includes("hh")) {
+              valueMap[signal] = this._timeToSignal(input.value || "00:00");
+            } else {
+              valueMap[signal] = (input.value || "00:00").replace(":", "");
+            }
+          } else if (signal === "MIN_THRESH_CHG_DUR") {
+            valueMap[signal] = String(Number(input.value) * 60);
           } else {
-            this._originalValues[signal] = (input.value || "00:00").replace(":", "");
+            valueMap[signal] = input.value;
           }
-        } else if (signal === "MIN_THRESH_CHG_DUR") {
-          this._originalValues[signal] = String(Number(input.value) * 60);
-        } else {
-          this._originalValues[signal] = input.value;
+        });
+      });
+
+      // Collect ALL collapse card (82/83) array values - must submit all together
+      const collapseFields = container.querySelectorAll(".dynamic-field.visible[data-collapse]");
+      if (collapseFields.length > 0) {
+        let hasAnyChange = false;
+        const collapseValues = {};
+        collapseFields.forEach(fieldEl => {
+          const sig = fieldEl.dataset.signal;
+          if (!sig) return;
+          const arrEls = fieldEl.querySelectorAll("[data-arr-signal]");
+          let origArr;
+          try { origArr = JSON.parse(this._originalValues[sig] || "[]"); } catch { origArr = []; }
+          const newArr = [...origArr];
+          arrEls.forEach(el => {
+            const idx = parseInt(el.dataset.arrIndex);
+            if (isNaN(idx)) return;
+            let val;
+            if (el.classList.contains("time-input") || el.dataset.arrFmt === "time") {
+              val = (el.value || "00:00").replace(":", "");
+            } else if (el.type === "number") {
+              val = el.value;
+            } else {
+              val = el.tagName === "SELECT" ? Number(el.value) : el.value;
+            }
+            newArr[idx] = val;
+          });
+          collapseValues[sig] = JSON.stringify(newArr);
+          if (collapseValues[sig] !== JSON.stringify(origArr)) hasAnyChange = true;
+        });
+        // Check FLAG_ENABLE_CYCLE change
+        this._collectEnableCycle(container, collapseValues);
+        if (collapseValues["FLAG_ENABLE_CYCLE"] || hasAnyChange) {
+          // Submit all TCT + FLAG_ENABLE_CYCLE together
+          Object.assign(valueMap, collapseValues);
+          if (!valueMap["FLAG_ENABLE_CYCLE"]) {
+            valueMap["FLAG_ENABLE_CYCLE"] = this._originalValues["FLAG_ENABLE_CYCLE"] || "[0,0,0,0,0,0]";
+          }
+        }
+      }
+
+      // Collect deleted time slots (send 0)
+      allTimeSlots.forEach(slot => {
+        if (slot.dataset.timeHidden === "true") {
+          const inputs = slot.querySelectorAll("input.time-input");
+          const hasOrig = Array.from(inputs).some(inp => {
+            const sig = inp.dataset.signal;
+            return sig && this._originalValues[sig] && String(this._originalValues[sig]) !== "0";
+          });
+          if (hasOrig) {
+            inputs.forEach(inp => {
+              const sig = inp.dataset.signal;
+              if (sig) valueMap[sig] = "0";
+            });
+          }
         }
       });
 
-      statusMsg.textContent = _t(this._hass, 'submit_success');
-      statusMsg.className = "status success";
-    } catch (err) {
-      const errMsg = err.message || err.error || _t(this._hass, 'unknown_error');
-      statusMsg.textContent = _t(this._hass, 'submit_fail') + errMsg;
-      statusMsg.className = "status error";
-    }
+      if (Object.keys(valueMap).length === 0) {
+        statusMsg.textContent = _t(this._hass, 'no_change');
+        statusMsg.className = "status";
+        return;
+      }
 
-    submitBtn.disabled = false;
-    setTimeout(() => { statusMsg.textContent = ""; }, 3000);
+      try {
+        await this._hass.callWS({
+          type: "hanchuess/iot_set",
+          sn: this._config.sn,
+          dev_type: "2",
+          value: valueMap,
+        });
+
+        Object.assign(this._originalValues, valueMap);
+
+        // Sync all visible field values to _originalValues
+        container.querySelectorAll("input[data-signal]").forEach(input => {
+          const signal = input.dataset.signal;
+          if (!signal || !input.value) return;
+          if (input.classList.contains("time-input")) {
+            const fmt = input.closest("[data-time-fmt]")?.dataset.timeFmt || "";
+            if (fmt.includes("HH") || fmt.includes("hh")) {
+              this._originalValues[signal] = this._timeToSignal(input.value || "00:00");
+            } else {
+              this._originalValues[signal] = (input.value || "00:00").replace(":", "");
+            }
+          } else if (signal === "MIN_THRESH_CHG_DUR") {
+            this._originalValues[signal] = String(Number(input.value) * 60);
+          } else {
+            this._originalValues[signal] = input.value;
+          }
+        });
+
+        statusMsg.textContent = _t(this._hass, 'submit_success');
+        statusMsg.className = "status success";
+      } catch (err) {
+        const errMsg = err.message || err.error || _t(this._hass, 'unknown_error');
+        statusMsg.textContent = _t(this._hass, 'submit_fail') + errMsg;
+        statusMsg.className = "status error";
+      }
+
+    } finally {
+      submitBtn.disabled = false;
+      setTimeout(() => { statusMsg.textContent = ""; }, 3000);
+    }
   }
 
   _collectEnableCycle(container, targetMap) {
