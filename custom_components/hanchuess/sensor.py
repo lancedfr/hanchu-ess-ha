@@ -197,30 +197,6 @@ STATISTICS_SENSORS = {
 }
 
 BATTERY_SENSORS = {
-    "battery_temperature_1": {
-        "key": "tBat1",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-    },
-    "battery_temperature_2": {
-        "key": "tBat2",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-    },
-    "battery_temperature_3": {
-        "key": "tBat3",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-    },
-    "battery_temperature_4": {
-        "key": "tBat4",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-    },
     "battery_temperature_env": {
         "key": "tEnv",
         "device_class": SensorDeviceClass.TEMPERATURE,

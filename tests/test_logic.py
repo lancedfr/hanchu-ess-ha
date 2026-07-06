@@ -70,6 +70,21 @@ def _make_battery_sensor(key, value="23.5", battery_serial_number="B1"):
     return BatterySensor(coordinator, _FakeEntry(), battery_serial_number, key, BATTERY_SENSORS[key])
 
 
+def _make_battery_temperature_sensor(index, value="23.5", battery_serial_number="B1"):
+    sensor_key = f"battery_temperature_{index}"
+    config = {
+        "key": f"tBat{index}",
+        "name": f"Battery Temperature {index}",
+        "device_class": "temperature",
+        "state_class": "measurement",
+        "unit": "degC",
+    }
+    coordinator = _FakeBatteryCoordinator(
+        battery_serial_number, {config["key"]: value}
+    )
+    return BatterySensor(coordinator, _FakeEntry(), battery_serial_number, sensor_key, config)
+
+
 def test_extract_battery_serials_reads_bms_list():
     station_detail = {
         "data": {
@@ -229,7 +244,7 @@ def test_scale_factor_applied():
 
 
 def test_battery_temperature_sensor_uses_device_data():
-    s = _make_battery_sensor("battery_temperature_1", "23.5")
+    s = _make_battery_temperature_sensor(1, "23.5")
     assert s.native_value == 23.5
 
 
