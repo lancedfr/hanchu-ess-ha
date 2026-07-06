@@ -9,7 +9,29 @@ Entries up to and including 1.2.9 are summarised from the git history and tags;
 later versions are tracked here going forward.
 
 ## [Unreleased]
- 
+
+### Added
+- Per-battery-pack sensor support using discovered battery serials, including pack
+  SOC, voltage, current, and temperature sensors.
+- Battery polling coordinator and a new **Battery poll interval** option
+  (default 600s, configurable in the options flow).
+- Battery diagnostics payload support with anonymised per-battery buckets and
+  coordinator metadata.
+
+### Changed
+- Config flow now resolves and stores `stationId`, fetches station detail during
+  setup, and persists discovered `battery_serials`.
+- Runtime setup now refreshes battery serials from station detail and syncs
+  updates across entries sharing the same station.
+- API locale header handling now normalises to `zh` for Chinese locales and `en`
+  otherwise.
+
+### Fixed
+- `stationId` resolution can now reuse pre-fetched device status to avoid
+  redundant API calls during setup.
+- Diagnostics redaction expanded to include battery identifiers and related
+  device IDs (`battery_serials`, `devId`, `deviceId`).
+
 
 ## [1.2.12] - 2026-07-04
 
