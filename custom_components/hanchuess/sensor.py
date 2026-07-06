@@ -257,6 +257,32 @@ BATTERY_SENSORS = {
         "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfElectricCurrent.AMPERE,
     },
+    "battery_soh_pack": {
+        "key": "sohPack",
+        "device_class": SensorDeviceClass.BATTERY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": PERCENTAGE,
+        "icon": "mdi:battery-heart-variant",
+    },
+    "battery_design_capacity": {
+        "key": "designCapacity",
+        "device_class": SensorDeviceClass.ENERGY,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "icon": "mdi:battery-high",
+    },
+    "battery_full_capacity": {
+        "key": "capFull",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Ah",
+        "icon": "mdi:battery-arrow-up",
+    },
+    "battery_remaining_capacity": {
+        "key": "capRemain",
+        "state_class": SensorStateClass.MEASUREMENT,
+        "unit": "Ah",
+        "icon": "mdi:battery-arrow-down",
+    },
 }
 
 STATUS_MAP = {
@@ -410,6 +436,15 @@ def _derive_directional_power(value, mode):
     return 0.0 if result == 0 else result
 
 
+def _battery_temperature_count(battery_data: dict) -> int:
+    """Return the number of tBat sensors to surface for a battery."""
+    try:
+        value = int(float(battery_data.get("numBatT")))
+        return max(value, 0)
+    except (TypeError, ValueError):
+        return 4
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
@@ -433,7 +468,25 @@ async def async_setup_entry(
         entities.append(HanchueSensor(statistics, entry, sensor_key, config))
     if battery_coordinator and entry.data.get("battery_serials"):
         for battery_serial in entry.data.get("battery_serials", []):
+            battery_data = battery_coordinator.data.get(battery_serial, {})
+            for temp_index in range(1, _battery_temperature_count(battery_data) + 1):
+                sensor_key = f"battery_temperature_{temp_index}"
+                config = BATTERY_SENSORS.get(sensor_key, {
+                    "key": f"tBat{temp_index}",
+                    "name": f"Battery Temperature {temp_index}",
+                    "device_class": SensorDeviceClass.TEMPERATURE,
+                    "state_class": SensorStateClass.MEASUREMENT,
+                    "unit": UnitOfTemperature.CELSIUS,
+                })
+                entities.append(
+                    BatterySensor(battery_coordinator, entry, battery_serial, sensor_key, config)
+                )
             for sensor_key, config in BATTERY_SENSORS.items():
+                if (
+                    sensor_key.startswith("battery_temperature_")
+                    and sensor_key.replace("battery_temperature_", "").isdigit()
+                ):
+                    continue
                 entities.append(
                     BatterySensor(battery_coordinator, entry, battery_serial, sensor_key, config)
                 )
@@ -505,8 +558,12 @@ class BatterySensor(CoordinatorEntity, SensorEntity):
         self._config = config
         self._attr_unique_id = f"{battery_serial}_{sensor_key}"
         self._attr_icon = config.get("icon")
-        self._attr_has_entity_name = True
-        self._attr_translation_key = sensor_key
+        if "name" in config:
+            self._attr_name = config["name"]
+            self._attr_has_entity_name = False
+        else:
+            self._attr_has_entity_name = True
+            self._attr_translation_key = sensor_key
         self._attr_device_class = config.get("device_class")
         self._attr_state_class = config.get("state_class")
         self._attr_native_unit_of_measurement = config.get("unit")

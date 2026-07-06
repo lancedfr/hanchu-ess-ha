@@ -12,7 +12,7 @@ This fork extends the original guoxiatech/hanchu-ess-ha integration — publishe
 - Battery Charge Power (W) — charge only derived power
 - Battery Discharge Power (W) — discharge only derived power
 - Battery Capacity (kWh)
-- Battery pack sensors (per discovered battery serial): Pack SOC (%), Pack Voltage (V), Pack Current (A), Temperature 1-4 (degC), Environment Temperature, Pack Temperature, MOS Temperature
+- Battery pack sensors (per discovered battery serial): Pack SOC (%), Pack SOH (%), Pack Voltage (V), Pack Current (A), Design Capacity (kWh), Full Capacity (Ah), Remaining Capacity (Ah), Temperature 1-N (degC, based on `numBatT`), Environment Temperature, Pack Temperature, MOS Temperature
 - Grid Power (W) — signed (positive = import, negative = export)
 - Grid Import Power (W) — import only derived power
 - Grid Export Power (W) — export only derived power

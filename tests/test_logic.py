@@ -24,7 +24,11 @@ from custom_components.hanchuess.sensor import (
 )
 from custom_components.hanchuess.switch import _fast_charge_duration
 from custom_components.hanchuess.time import TIME_SLOTS, HanchuessTimeSlot
-from custom_components.hanchuess.sensor import BatterySensor, BATTERY_SENSORS
+from custom_components.hanchuess.sensor import (
+    BatterySensor,
+    BATTERY_SENSORS,
+    _battery_temperature_count,
+)
 
 
 class _FakeEntry:
@@ -237,6 +241,37 @@ def test_battery_soc_sensor_uses_device_data():
 def test_battery_voltage_sensor_uses_device_data():
     s = _make_battery_sensor("battery_voltage", "52.71")
     assert s.native_value == 52.71
+
+
+def test_battery_soh_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_soh_pack", "100")
+    assert s.native_value == 100.0
+
+
+def test_battery_design_capacity_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_design_capacity", "9.40")
+    assert s.native_value == 9.4
+
+
+def test_battery_full_capacity_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_full_capacity", "184.00")
+    assert s.native_value == 184.0
+
+
+def test_battery_remaining_capacity_sensor_uses_device_data():
+    s = _make_battery_sensor("battery_remaining_capacity", "129.72")
+    assert s.native_value == 129.72
+
+
+def test_battery_temperature_count_uses_num_bat_t():
+    assert _battery_temperature_count({"numBatT": 4}) == 4
+    assert _battery_temperature_count({"numBatT": "3"}) == 3
+    assert _battery_temperature_count({"numBatT": "0"}) == 0
+
+
+def test_battery_temperature_count_falls_back_to_legacy_default():
+    assert _battery_temperature_count({}) == 4
+    assert _battery_temperature_count({"numBatT": "bad"}) == 4
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,9 @@ later versions are tracked here going forward.
   (default 600s, configurable in the options flow).
 - Battery diagnostics payload support with anonymised per-battery buckets and
   coordinator metadata.
+- Additional per-battery BMS sensors: state of health (`sohPack`), design
+  capacity (`designCapacity`), full capacity (`capFull`), and remaining
+  capacity (`capRemain`).
 
 ### Changed
 - Config flow now resolves and stores `stationId`, fetches station detail during
@@ -25,6 +28,8 @@ later versions are tracked here going forward.
   updates across entries sharing the same station.
 - API locale header handling now normalises to `zh` for Chinese locales and `en`
   otherwise.
+- Battery pack temperature sensors now surface dynamically as `tBat1..tBatN`
+  based on each battery payload's `numBatT` value.
 
 ### Fixed
 - `stationId` resolution can now reuse pre-fetched device status to avoid
