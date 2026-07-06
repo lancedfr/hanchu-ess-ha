@@ -173,6 +173,18 @@ Every push and pull request runs three checks that must pass:
 - **Hassfest** (`.github/workflows/hassfest.yml`) — validates Home Assistant
   integration standards.
 
+## Submitting brand assets to home-assistant/brands
+
+Home Assistant's brand icons/logos live in a separate repository
+([home-assistant/brands](https://github.com/home-assistant/brands)), not in this
+one. `custom_components/hanchuess/brand/icon.png` and `logo.png` already exist
+here, but they still need to be submitted upstream: open a PR against
+`home-assistant/brands` adding them under
+`custom_integrations/hanchuess/icon.png` and `custom_integrations/hanchuess/logo.png`,
+sourced from this repo's `custom_components/hanchuess/brand/` folder. The
+`brands` rule in `quality_scale.yaml` stays `todo` until that PR merges — it's
+the only Bronze rule this repo can't complete on its own.
+
 ## Pull requests
 
 1. Branch from `main`.

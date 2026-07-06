@@ -3,10 +3,10 @@ import logging
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import UnitOfPower, PERCENTAGE
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
+from . import HanchuessConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,12 +50,12 @@ NUMBERS = {
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: HanchuessConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    data = hass.data[DOMAIN][entry.entry_id]
-    client = data["realtime"].client
-    number_limits = data.get("number_limits", {})
-    startup_values = data.get("startup_values", {})
+    data = entry.runtime_data
+    client = data.realtime.client
+    number_limits = data.number_limits
+    startup_values = data.startup_values
     entities = [
         HanchuessNumber(client, entry, number_key, config, number_limits, startup_values)
         for number_key, config in NUMBERS.items()

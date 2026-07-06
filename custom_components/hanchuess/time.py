@@ -4,10 +4,10 @@ import logging
 from datetime import time
 from homeassistant.components.time import TimeEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
+from . import HanchuessConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,11 +78,11 @@ TIME_SLOTS = {
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: HanchuessConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    data = hass.data[DOMAIN][entry.entry_id]
-    client = data["realtime"].client
-    startup_values = data.get("startup_values", {})
+    data = entry.runtime_data
+    client = data.realtime.client
+    startup_values = data.startup_values
 
     entities = [
         HanchuessTimeSlot(client, entry, slot_key, config, startup_values)

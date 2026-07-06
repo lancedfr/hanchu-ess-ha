@@ -1,49 +1,51 @@
 # Tracks this integration's progress against Home Assistant's integration
 # quality scale: https://developers.home-assistant.io/docs/core/integration-quality-scale/
 #
-# TODO manifest.json — deliberately unchanged. I did not add the quality_scale key: the integration hasn't
-#   achieved bronze (several real rules need to pass), so declaring a tier would be inaccurate and would fail
-#   hassfest's bronze-completeness check. The YAML stands as a tracking document, which the
-#   custom-component hassfest action doesn't strictly validate.
+# Bronze is met except for `brands`, which requires an external PR to
+# home-assistant/brands (see CONTRIBUTING.md) that this repo doesn't control.
+# manifest.json declares "quality_scale": "bronze" with that gap documented here.
 rules:
   # Bronze
   action-setup:
-    status: todo
-    comment: Services are registered in async_setup_entry, not async_setup.
+    status: done
+    comment: Services are registered in async_setup.
   appropriate-polling:
     status: done
     comment: Realtime coordinator polls every 60s, statistics every 5min.
   brands:
     status: todo
-    comment: Brand assets not yet submitted to home-assistant/brands.
+    comment: Brand assets exist in custom_components/hanchuess/brand/ but still need to be submitted to home-assistant/brands (see CONTRIBUTING.md).
   common-modules:
     status: done
     comment: Shared logic lives in api.py and coordinator.py.
   config-flow-test-coverage:
-    status: todo
-    comment: No local test suite.
+    status: done
+    comment: tests/test_config_flow.py covers success, auth failure, no-devices, already-configured abort, reauth, import, and options flows.
   config-flow:
     status: done
   dependency-transparency:
     status: done
     comment: No third-party requirements; uses HA-provided aiohttp.
   docs-actions:
-    status: todo
+    status: done
+    comment: README.md documents both services, matching services.yaml.
   docs-high-level-description:
     status: done
   docs-installation-instructions:
     status: done
   docs-removal-instructions:
-    status: todo
+    status: done
+    comment: README.md has a "Removing the integration" section.
   entity-event-setup:
     status: done
   entity-unique-id:
     status: done
   has-entity-name:
-    status: todo
+    status: done
+    comment: All entities set _attr_has_entity_name = True.
   runtime-data:
-    status: todo
-    comment: State is stored in hass.data rather than entry.runtime_data.
+    status: done
+    comment: Per-entry state is stored in entry.runtime_data (HanchuessData).
   test-before-configure:
     status: done
     comment: Config flow validates login and device list before creating the entry.
@@ -59,7 +61,7 @@ rules:
     status: todo
   config-entry-unloading:
     status: done
-    comment: async_unload_entry unloads platforms and clears hass.data.
+    comment: async_unload_entry unloads platforms; entry.runtime_data is cleared automatically by Home Assistant.
   docs-configuration-parameters:
     status: todo
   docs-installation-parameters:
