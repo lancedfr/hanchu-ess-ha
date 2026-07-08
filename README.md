@@ -106,6 +106,19 @@ Low-level service for sending arbitrary key/value control signals directly to th
 2. Restart Home Assistant
 3. Add the integration via **Settings → Devices & Services**
 
+## Removing the integration
+
+1. Go to **Settings → Devices & Services**, find the Hanchuess entry, and choose
+   **Delete**. This removes the device and its entities.
+2. HACS installs: also remove Hanchuess from HACS (or its custom repository) so
+   it's no longer offered for updates — this also deletes the integration files.
+3. Manual installs: additionally delete the `custom_components/hanchuess` folder
+   and restart Home Assistant.
+4. The integration auto-registers a Lovelace resource for the custom card on
+   first setup. This resource isn't tied to the config entry's lifecycle, so it
+   may still be listed under **Settings → Dashboards → Resources** after
+   removal — delete it manually if you no longer need it.
+
 ## Configuration
 
 The setup flow only asks for your Hanchu app credentials — it then discovers your

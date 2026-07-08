@@ -2,6 +2,7 @@
 import logging
 import os
 import asyncio
+from dataclasses import dataclass
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -29,6 +30,36 @@ SERVICE_SCHEMA = vol.Schema({
 })
 
 CARD_URL = "/hacsfiles/hanchuess/hanchuess-energy-card.js"
+
+
+@dataclass
+class HanchuessData:
+    """Data stored on a config entry's runtime_data for the lifetime of its setup."""
+
+    realtime: HanchuessRealtimeCoordinator
+    statistics: HanchuessStatisticsCoordinator
+    battery: HanchuessBatteryCoordinator | None
+    number_limits: dict
+    startup_values: dict
+
+
+type HanchuessConfigEntry = ConfigEntry[HanchuessData]
+
+
+def _iter_entry_runtime_data(hass: HomeAssistant):
+    """Yield (entry, runtime_data) for every Hanchuess entry that has finished setup."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        data = getattr(entry, "runtime_data", None)
+        if data is not None:
+            yield entry, data
+
+
+def _find_realtime_coordinator(hass: HomeAssistant, sn: str | None = None):
+    """Return the realtime coordinator for `sn`, or the first configured one if sn is None."""
+    for entry, data in _iter_entry_runtime_data(hass):
+        if sn is None or entry.data.get("sn") == sn:
+            return data.realtime
+    return None
 
 
 async def _async_initial_refresh(coordinator, entry: ConfigEntry) -> None:
@@ -125,6 +156,72 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_iot_set)
     websocket_api.async_register_command(hass, ws_fast_charge)
 
+    async def handle_device_control(call: ServiceCall):
+        inverter_serial_number = call.data["sn"]
+        dev_type = call.data["dev_type"]
+        value = call.data["value"]
+        _LOGGER.info(
+            "[HANCHUESS] service device_control: %s %s",
+            inverter_serial_number,
+            value,
+        )
+        coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
+        if not coordinator:
+            _LOGGER.error(
+                "[HANCHUESS] device_control: device %s not found",
+                inverter_serial_number,
+            )
+            return
+        result = await coordinator.client.async_device_control(
+            inverter_serial_number, dev_type, value
+        )
+        if not result.get("success"):
+            _LOGGER.error("[HANCHUESS] device_control failed: %s", result.get("msg"))
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_DEVICE_CONTROL, handle_device_control, schema=SERVICE_SCHEMA
+    )
+
+    async def handle_fast_charge(call: ServiceCall):
+        inverter_serial_number = call.data.get("sn")
+
+        if not inverter_serial_number:
+            coordinator = _find_realtime_coordinator(hass)
+            inverter_serial_number = coordinator.entry.data.get("sn") if coordinator else None
+
+        if not inverter_serial_number:
+            _LOGGER.error("[HANCHUESS] fast_charge: No inverter serial found")
+            return
+
+        act = call.data["act"]
+        duration = call.data.get("duration", 0)
+
+        coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
+        if not coordinator:
+            _LOGGER.error(
+                "[HANCHUESS] fast_charge: device %s not found",
+                inverter_serial_number,
+            )
+            return
+
+        result = await coordinator.client.async_fast_charge_discharge(
+            inverter_serial_number, act, duration
+        )
+
+        if not result.get("success"):
+            _LOGGER.error("[HANCHUESS] fast_charge failed: %s", result.get("msg"))
+
+    hass.services.async_register(
+        DOMAIN,
+        "fast_charge",
+        handle_fast_charge,
+        schema=vol.Schema({
+            vol.Optional("sn"): cv.string,
+            vol.Required("act"): vol.All(int, vol.Range(min=-3, max=3)),
+            vol.Optional("duration"): vol.All(int, vol.Range(min=0)),
+        }),
+    )
+
     return True
 
 
@@ -139,18 +236,13 @@ async def ws_iot_get(hass, connection, msg):
     inverter_serial_number = msg["sn"]
     dev_type = msg["dev_type"]
     keys = msg["keys"]
-    target_client = None
-    for eid, data in hass.data[DOMAIN].items():
-        if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
-                target_client = data["realtime"].client
-                break
-    if not target_client:
+    coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
+    if not coordinator:
         connection.send_error(
             msg["id"], "not_found", f"Device {inverter_serial_number} not found"
         )
         return
-    result = await target_client.async_iot_get(inverter_serial_number, dev_type, keys)
+    result = await coordinator.client.async_iot_get(inverter_serial_number, dev_type, keys)
     connection.send_result(msg["id"], result)
 
 
@@ -171,18 +263,13 @@ async def ws_iot_set(hass, connection, msg):
                 value[k] = int(v)
             except ValueError:
                 pass
-    target_client = None
-    for eid, data in hass.data[DOMAIN].items():
-        if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
-                target_client = data["realtime"].client
-                break
-    if not target_client:
+    coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
+    if not coordinator:
         connection.send_error(
             msg["id"], "not_found", f"Device {inverter_serial_number} not found"
         )
         return
-    result = await target_client.async_device_control(
+    result = await coordinator.client.async_device_control(
         inverter_serial_number, dev_type, value
     )
     if result.get("success"):
@@ -200,18 +287,13 @@ async def ws_iot_set(hass, connection, msg):
 @websocket_api.async_response
 async def ws_fast_charge(hass, connection, msg):
     inverter_serial_number = msg["sn"]
-    target_client = None
-    for eid, data in hass.data[DOMAIN].items():
-        if isinstance(data, dict) and "realtime" in data:
-            if data["realtime"].entry.data.get("sn") == inverter_serial_number:
-                target_client = data["realtime"].client
-                break
-    if not target_client:
+    coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
+    if not coordinator:
         connection.send_error(
             msg["id"], "not_found", f"Device {inverter_serial_number} not found"
         )
         return
-    result = await target_client.async_fast_charge_discharge(
+    result = await coordinator.client.async_fast_charge_discharge(
         inverter_serial_number, msg["act"], msg["duration"]
     )
     if result.get("success"):
@@ -220,7 +302,7 @@ async def ws_fast_charge(hass, connection, msg):
         connection.send_error(msg["id"], "fast_charge_failed", result.get("msg", "Unknown error"))
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: HanchuessConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     if not hass.data[DOMAIN].get("_card_registered"):
@@ -319,96 +401,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as err:
         _LOGGER.warning("[HANCHUESS] Could not fetch startup values: %s", err)
 
-    hass.data[DOMAIN][entry.entry_id] = {
-        "realtime": coordinator,
-        "statistics": stats_coordinator,
-        "battery": battery_coordinator,
-        "number_limits": number_limits,
-        "startup_values": startup_values,
-    }
+    entry.runtime_data = HanchuessData(
+        realtime=coordinator,
+        statistics=stats_coordinator,
+        battery=battery_coordinator,
+        number_limits=number_limits,
+        startup_values=startup_values,
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    async def handle_device_control(call: ServiceCall):
-        inverter_serial_number = call.data["sn"]
-        dev_type = call.data["dev_type"]
-        value = call.data["value"]
-        _LOGGER.info(
-            "[HANCHUESS] service device_control: %s %s",
-            inverter_serial_number,
-            value,
-        )
-        target_client = None
-        for eid, data in hass.data[DOMAIN].items():
-            if isinstance(data, dict) and "realtime" in data:
-                if data["realtime"].entry.data.get("sn") == inverter_serial_number:
-                    target_client = data["realtime"].client
-                    break
-        if not target_client:
-            _LOGGER.error(
-                "[HANCHUESS] device_control: device %s not found",
-                inverter_serial_number,
-            )
-            return
-        result = await target_client.async_device_control(
-            inverter_serial_number, dev_type, value
-        )
-        if not result.get("success"):
-            _LOGGER.error("[HANCHUESS] device_control failed: %s", result.get("msg"))
-
-    if not hass.services.has_service(DOMAIN, SERVICE_DEVICE_CONTROL):
-        hass.services.async_register(
-            DOMAIN, SERVICE_DEVICE_CONTROL, handle_device_control, schema=SERVICE_SCHEMA
-        )
-
-    async def handle_fast_charge(call: ServiceCall):
-        inverter_serial_number = call.data.get("sn")
-
-        if not inverter_serial_number:
-            for eid, data in hass.data[DOMAIN].items():
-                if isinstance(data, dict) and "realtime" in data:
-                    inverter_serial_number = data["realtime"].entry.data.get("sn")
-                    break
-
-        if not inverter_serial_number:
-            _LOGGER.error("[HANCHUESS] fast_charge: No inverter serial found")
-            return
-
-        act = call.data["act"]
-        duration = call.data.get("duration", 0)
-
-        target_client = None
-        for eid, data in hass.data[DOMAIN].items():
-            if isinstance(data, dict) and "realtime" in data:
-                if data["realtime"].entry.data.get("sn") == inverter_serial_number:
-                    target_client = data["realtime"].client
-                    break
-
-        if not target_client:
-            _LOGGER.error(
-                "[HANCHUESS] fast_charge: device %s not found",
-                inverter_serial_number,
-            )
-            return
-
-        result = await target_client.async_fast_charge_discharge(
-            inverter_serial_number, act, duration
-        )
-
-        if not result.get("success"):
-            _LOGGER.error("[HANCHUESS] fast_charge failed: %s", result.get("msg"))
-
-    if not hass.services.has_service(DOMAIN, "fast_charge"):
-        hass.services.async_register(
-            DOMAIN,
-            "fast_charge",
-            handle_fast_charge,
-            schema=vol.Schema({
-                vol.Optional("sn"): cv.string,
-                vol.Required("act"): vol.All(int, vol.Range(min=-3, max=3)),
-                vol.Optional("duration"): vol.All(int, vol.Range(min=0)),
-            }),
-        )
 
     pending = entry.data.get("pending_devices", [])
     if pending:
@@ -430,8 +431,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-    return unload_ok
+async def async_unload_entry(hass: HomeAssistant, entry: HanchuessConfigEntry) -> bool:
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

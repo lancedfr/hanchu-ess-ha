@@ -2,10 +2,10 @@
 import logging
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN, CONF_FAST_CHARGE_DURATION, DEFAULT_FAST_CHARGE_DURATION
+from . import HanchuessConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,10 +21,10 @@ def _fast_charge_duration(entry) -> int:
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: HanchuessConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    data = hass.data[DOMAIN][entry.entry_id]
-    client = data["realtime"].client
+    data = entry.runtime_data
+    client = data.realtime.client
     async_add_entities([
         FastChargeSwitch(client, entry),
         FastDischargeSwitch(client, entry),

@@ -2,12 +2,12 @@
 import logging
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
+from . import HanchuessConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,11 +22,11 @@ WORK_MODES_REVERSE = {v: k for k, v in WORK_MODES.items()}
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: HanchuessConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    data = hass.data[DOMAIN][entry.entry_id]
-    client = data["realtime"].client
-    startup_values = data.get("startup_values", {})
+    data = entry.runtime_data
+    client = data.realtime.client
+    startup_values = data.startup_values
     async_add_entities([WorkModeSelect(client, entry, startup_values)])
 
 

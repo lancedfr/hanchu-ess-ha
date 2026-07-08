@@ -4,11 +4,10 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
 
-from .const import DOMAIN
+from . import HanchuessConfigEntry
 
 TO_REDACT = {"token", "account", "password", "sn", "stationId", "username", "pwd",
              "unique_id", "title", "devId", "battery_serials", "deviceId"}
@@ -29,7 +28,7 @@ def _redact_battery_payload(payload: Any) -> dict[str, Any]:
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    hass: HomeAssistant, entry: HanchuessConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     diag: dict[str, Any] = {
@@ -43,21 +42,18 @@ async def async_get_config_entry_diagnostics(
         ),
     }
 
-    store = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    if not store:
+    store = getattr(entry, "runtime_data", None)
+    if store is None:
         # Entry not fully set up yet — return what we have so download never fails.
         return diag
 
-    realtime = store.get("realtime")
-    statistics = store.get("statistics")
-
     diag["device_status"] = async_redact_data(
-        getattr(realtime, "data", None) or {}, TO_REDACT
+        getattr(store.realtime, "data", None) or {}, TO_REDACT
     )
     diag["statistics"] = async_redact_data(
-        getattr(statistics, "data", None) or {}, TO_REDACT
+        getattr(store.statistics, "data", None) or {}, TO_REDACT
     )
-    battery = store.get("battery")
+    battery = store.battery
     battery_payload = getattr(battery, "data", None) or {}
     configured_serials = entry.data.get("battery_serials", []) or []
     diag["battery"] = async_redact_data(
@@ -69,16 +65,16 @@ async def async_get_config_entry_diagnostics(
         },
         TO_REDACT,
     )
-    diag["number_limits"] = store.get("number_limits", {})
+    diag["number_limits"] = store.number_limits
     diag["startup_values"] = async_redact_data(
-        store.get("startup_values", {}) or {}, TO_REDACT
+        store.startup_values or {}, TO_REDACT
     )
 
     return diag
 
 
 async def async_get_device_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry
+    hass: HomeAssistant, entry: HanchuessConfigEntry, device: DeviceEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a device.
 

@@ -139,6 +139,43 @@ async def test_user_flow_no_devices(hass: HomeAssistant):
         patcher.stop()
 
 
+async def test_select_device_aborts_if_already_configured(hass: HomeAssistant):
+    """A device that becomes configured between rendering and submitting the
+    select_device form aborts instead of creating a duplicate entry.
+
+    A second device (SN2) must stay available so the "no available devices"
+    guard (config_flow.py's `if not available`) doesn't fire first and mask
+    the unique-id abort this test targets.
+    """
+    patcher, _ = _patched_client(
+        token="tok",
+        devices=[{"sn": "SN1", "devType": "2"}, {"sn": "SN2", "devType": "2"}],
+    )
+    try:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"account": "a", "password": "p"}
+        )
+        assert result2["type"] == FlowResultType.FORM
+        assert result2["step_id"] == "select_device"
+
+        # Simulate SN1 becoming configured by another flow in the meantime.
+        existing = MockConfigEntry(
+            domain=DOMAIN, data={"sn": "SN1", "token": "tok"}, unique_id="SN1"
+        )
+        existing.add_to_hass(hass)
+
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"], {"devices": ["SN1"]}
+        )
+        assert result3["type"] == FlowResultType.ABORT
+        assert result3["reason"] == "already_configured"
+    finally:
+        patcher.stop()
+
+
 async def test_reauth_flow_success(hass: HomeAssistant):
     entry = MockConfigEntry(
         domain=DOMAIN, data={"sn": "SN1", "token": "old"}, unique_id="SN1"

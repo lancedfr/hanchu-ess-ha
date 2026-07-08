@@ -1,8 +1,8 @@
 """Unit tests for the diagnostics module (no hass harness required).
 
-The diagnostics entry points only need ``entry.as_dict()``/``entry.data``,
-``hass.data`` (a plain dict lookup) and ``async_redact_data`` (available with the
-bare ``homeassistant`` package), so they can be exercised with light fakes in the
+The diagnostics entry points only need ``entry.as_dict()``/``entry.data``/
+``entry.runtime_data`` and ``async_redact_data`` (available with the bare
+``homeassistant`` package), so they can be exercised with light fakes in the
 same cross-platform style as ``tests/test_logic.py``. The module skips if the
 ``homeassistant`` package is unavailable.
 """
@@ -13,6 +13,7 @@ import pytest
 
 pytest.importorskip("homeassistant")
 
+from custom_components.hanchuess import HanchuessData
 from custom_components.hanchuess.const import DOMAIN
 from custom_components.hanchuess.diagnostics import (
     async_get_config_entry_diagnostics,
@@ -35,6 +36,7 @@ class _FakeEntry:
             "battery_serials": ["BAT-1", "BAT-2"],
             "dev_type": "2",
         }
+        self.runtime_data = None
 
     def as_dict(self):
         return {
@@ -45,20 +47,22 @@ class _FakeEntry:
         }
 
 
-def _make_hass(entry_id="entry1", store=None):
-    """Build a MagicMock hass whose ``.data`` is a real dict.
-
-    When ``store`` is given it is placed under ``data[DOMAIN][entry_id]``;
-    otherwise the domain bucket is left empty so the early-return path runs.
-    """
-    hass = MagicMock()
-    hass.data = {DOMAIN: {entry_id: store} if store is not None else {}}
-    return hass
+def _make_runtime_data(**overrides):
+    """Build a HanchuessData with sensible defaults for fields a test doesn't set."""
+    defaults = {
+        "realtime": SimpleNamespace(data={}),
+        "statistics": SimpleNamespace(data={}),
+        "battery": None,
+        "number_limits": {},
+        "startup_values": {},
+    }
+    defaults.update(overrides)
+    return HanchuessData(**defaults)
 
 
 async def test_entry_not_set_up_returns_only_entry_and_resolved():
     entry = _FakeEntry()
-    hass = _make_hass(store=None)
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -68,15 +72,15 @@ async def test_entry_not_set_up_returns_only_entry_and_resolved():
 
 
 async def test_full_diagnostics_includes_all_sections():
-    store = {
-        "realtime": SimpleNamespace(data={"batSoc": 55, "loadPwr": 800}),
-        "statistics": SimpleNamespace(data={"loadTdEe": 12.3}),
-        "battery": SimpleNamespace(data={"BAT-1": {"tBat1": 23.5, "sn": "BAT-1"}}),
-        "number_limits": {"CHG_PWR_LMT": {"min": "0", "max": "5000"}},
-        "startup_values": {"WORK_MODE_CMB": "1"},
-    }
     entry = _FakeEntry()
-    hass = _make_hass(store=store)
+    entry.runtime_data = _make_runtime_data(
+        realtime=SimpleNamespace(data={"batSoc": 55, "loadPwr": 800}),
+        statistics=SimpleNamespace(data={"loadTdEe": 12.3}),
+        battery=SimpleNamespace(data={"BAT-1": {"tBat1": 23.5, "sn": "BAT-1"}}),
+        number_limits={"CHG_PWR_LMT": {"min": "0", "max": "5000"}},
+        startup_values={"WORK_MODE_CMB": "1"},
+    )
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -101,7 +105,7 @@ async def test_full_diagnostics_includes_all_sections():
 
 async def test_sensitive_keys_redacted_in_entry():
     entry = _FakeEntry()
-    hass = _make_hass(store=None)
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -118,7 +122,7 @@ async def test_sensitive_keys_redacted_in_entry():
 
 async def test_resolved_block_preserves_dev_type_redacts_sn():
     entry = _FakeEntry()
-    hass = _make_hass(store=None)
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -127,12 +131,11 @@ async def test_resolved_block_preserves_dev_type_redacts_sn():
 
 
 async def test_redaction_reaches_nested_coordinator_data():
-    store = {
-        "realtime": SimpleNamespace(data={"sn": "SN123", "token": "leak", "batSoc": 55}),
-        "statistics": SimpleNamespace(data={}),
-    }
     entry = _FakeEntry()
-    hass = _make_hass(store=store)
+    entry.runtime_data = _make_runtime_data(
+        realtime=SimpleNamespace(data={"sn": "SN123", "token": "leak", "batSoc": 55}),
+    )
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -145,13 +148,9 @@ async def test_number_limits_passed_through_unredacted():
     # number_limits is surfaced verbatim (not wrapped in async_redact_data), so
     # even a key that looks sensitive but is not in TO_REDACT stays intact.
     limits = {"CHG_PWR_LMT": {"min": "0", "max": "5000"}, "sn": "kept"}
-    store = {
-        "realtime": SimpleNamespace(data={}),
-        "statistics": SimpleNamespace(data={}),
-        "number_limits": limits,
-    }
     entry = _FakeEntry()
-    hass = _make_hass(store=store)
+    entry.runtime_data = _make_runtime_data(number_limits=limits)
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -159,12 +158,12 @@ async def test_number_limits_passed_through_unredacted():
 
 
 async def test_none_coordinator_data_becomes_empty_dict():
-    store = {
-        "realtime": SimpleNamespace(data=None),
-        "statistics": SimpleNamespace(data=None),
-    }
     entry = _FakeEntry()
-    hass = _make_hass(store=store)
+    entry.runtime_data = _make_runtime_data(
+        realtime=SimpleNamespace(data=None),
+        statistics=SimpleNamespace(data=None),
+    )
+    hass = MagicMock()
 
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -173,12 +172,11 @@ async def test_none_coordinator_data_becomes_empty_dict():
 
 
 async def test_device_diagnostics_delegates_to_entry_diagnostics():
-    store = {
-        "realtime": SimpleNamespace(data={"batSoc": 55}),
-        "statistics": SimpleNamespace(data={}),
-    }
     entry = _FakeEntry()
-    hass = _make_hass(store=store)
+    entry.runtime_data = _make_runtime_data(
+        realtime=SimpleNamespace(data={"batSoc": 55}),
+    )
+    hass = MagicMock()
     device = MagicMock()
 
     entry_diag = await async_get_config_entry_diagnostics(hass, entry)

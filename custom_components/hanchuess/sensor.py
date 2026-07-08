@@ -15,11 +15,11 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity import DeviceInfo
 from .const import DOMAIN
+from . import HanchuessConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -422,12 +422,12 @@ def _battery_temperature_count(battery_data: dict) -> int:
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: HanchuessConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    data = hass.data[DOMAIN][entry.entry_id]
-    realtime = data["realtime"]
-    statistics = data["statistics"]
-    battery_coordinator = data.get("battery")
+    data = entry.runtime_data
+    realtime = data.realtime
+    statistics = data.statistics
+    battery_coordinator = data.battery
     entities = []
     entities.append(DeviceStatusSensor(realtime, entry))
     for sensor_key, config in SENSORS.items():
@@ -479,11 +479,10 @@ class HanchueSensor(CoordinatorEntity, SensorEntity):
         inverter_serial_number = entry.data["sn"]
         self._attr_unique_id = f"{inverter_serial_number}_{sensor_key}"
         self._attr_icon = config.get("icon")
+        self._attr_has_entity_name = True
         if "name" in config:
             self._attr_name = config["name"]
-            self._attr_has_entity_name = False
         else:
-            self._attr_has_entity_name = True
             self._attr_translation_key = sensor_key
         if "device_class" in config:
             self._attr_device_class = config["device_class"]
@@ -534,11 +533,10 @@ class BatterySensor(CoordinatorEntity, SensorEntity):
         self._config = config
         self._attr_unique_id = f"{battery_serial}_{sensor_key}"
         self._attr_icon = config.get("icon")
+        self._attr_has_entity_name = True
         if "name" in config:
             self._attr_name = config["name"]
-            self._attr_has_entity_name = False
         else:
-            self._attr_has_entity_name = True
             self._attr_translation_key = sensor_key
         self._attr_device_class = config.get("device_class")
         self._attr_state_class = config.get("state_class")
