@@ -10,6 +10,21 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+### Changed
+- Migrated config entry state to Home Assistant's `runtime_data` pattern and moved
+  service registration to `async_setup`, satisfying the `runtime-data` and
+  `action-setup` Home Assistant Bronze quality-scale rules.
+- Sensors now always set `has_entity_name`, ensuring device-name prefixing is
+  consistent across all entities (`has-entity-name` rule).
+- Declared `"quality_scale": "bronze"` in `manifest.json`; all Bronze rules are now
+  met except `brands`, which is documented as pending an external PR to
+  `home-assistant/brands`.
+
+### Added
+- Config flow test coverage for the "device already configured" abort path.
+- Removal instructions in `README.md` and brand-asset submission guidance in
+  `CONTRIBUTING.md`.
+
 ## [1.3.0] - 2026-07-06
 
 ### Added
