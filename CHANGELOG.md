@@ -10,6 +10,15 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-13
+
+### Fixed
+- `battery_design_capacity` sensor no longer declares an invalid `energy`
+  device class with `measurement` state class (Home Assistant only allows
+  `total`/`total_increasing` for that combination). Design capacity is a
+  fixed rating, not a changing measurement, so it now has no device class or
+  state class, matching `battery_full_capacity` and `battery_remaining_capacity`.
+
 ## [1.4.0] - 2026-07-08
 
 ### Changed
@@ -166,7 +175,8 @@ later versions are tracked here going forward.
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.12...v1.3.0
 [1.2.12]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.11...v1.2.12
