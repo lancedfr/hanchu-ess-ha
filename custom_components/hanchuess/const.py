@@ -2,7 +2,7 @@
 import os
 
 DOMAIN = "hanchuess"
-PLATFORMS = ["sensor", "number", "switch", "select", "time"]
+PLATFORMS = ["sensor", "number", "switch", "select", "time", "button"]
 BASE_URL = os.environ.get("HANCHUESS_URL", "https://iess3.hanchuess.com")
 
 # AES-CBC key and IV used by the Hanchu gateway's encrypted payloads.

@@ -1126,6 +1126,20 @@ class HanchuessEnergyCard extends HTMLElement {
     return String(hours * 3600 + minutes * 60);
   }
 
+  async _clearStaging() {
+    // Tell HA to clear the staging buffer after a successful Load or Set.
+    // Non-critical — a failure here only means the Pending count stays non-zero
+    // until the next natural clear; don't surface it to the user.
+    try {
+      await this._hass.callWS({
+        type: "hanchuess/clear_staging",
+        sn: this._config.sn,
+      });
+    } catch (e) {
+      console.warn("[hanchuess] clear_staging failed:", e);
+    }
+  }
+
   async _loadData() {
     const loadBtn = this.shadowRoot.getElementById("load_btn");
     const statusMsg = this.shadowRoot.getElementById("status_msg");
@@ -1200,6 +1214,7 @@ class HanchuessEnergyCard extends HTMLElement {
 
       // Toggle fields based on work mode and update buttons
       const select = this.shadowRoot.getElementById("work_mode");
+      await this._clearStaging();
       this._toggleFields(select.value);
 
       statusMsg.textContent = _t(this._hass, 'load_success');
@@ -1499,6 +1514,7 @@ class HanchuessEnergyCard extends HTMLElement {
           }
         });
 
+        await this._clearStaging();
         statusMsg.textContent = _t(this._hass, 'submit_success');
         statusMsg.className = "status success";
       } catch (err) {

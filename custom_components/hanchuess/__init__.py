@@ -17,6 +17,7 @@ from .coordinator import (
     HanchuessStatisticsCoordinator,
     HanchuessBatteryCoordinator,
 )
+from .staging import SettingsStagingBuffer
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,8 @@ class HanchuessData:
     battery: HanchuessBatteryCoordinator | None
     number_limits: dict
     startup_values: dict
+    staging: SettingsStagingBuffer
+    control_registry: dict  # control_key -> entity, populated by async_added_to_hass
 
 
 type HanchuessConfigEntry = ConfigEntry[HanchuessData]
@@ -62,6 +65,74 @@ def _find_realtime_coordinator(hass: HomeAssistant, sn: str | None = None):
     return None
 
 
+def _find_entry(hass: HomeAssistant, sn: str | None = None):
+    """Return the config entry for `sn`, or the first one if sn is None."""
+    for entry, _data in _iter_entry_runtime_data(hass):
+        if sn is None or entry.data.get("sn") == sn:
+            return entry
+    return None
+
+
+async def async_flush_staged(hass: HomeAssistant, entry) -> bool:
+    """Flush all staged settings for ``entry`` to the device in one iotSet call.
+
+    Returns True on success, False on failure.  On double failure a persistent
+    notification is created and the buffer is left intact so the user can retry.
+    """
+    staging = entry.runtime_data.staging
+    snapshot = staging.snapshot()
+    if not snapshot:
+        _LOGGER.debug("[HANCHUESS] async_flush_staged: nothing staged, skipping")
+        return True
+
+    inverter_serial_number = entry.data["sn"]
+    client = entry.runtime_data.realtime.client
+    _LOGGER.info(
+        "[HANCHUESS] Flushing %d staged setting(s) for %s: %s",
+        len(snapshot),
+        inverter_serial_number,
+        list(snapshot.keys()),
+    )
+
+    result = await client.async_device_control(inverter_serial_number, "2", snapshot)
+    if result.get("success"):
+        staging.clear()
+        _LOGGER.info("[HANCHUESS] Write Settings succeeded for %s", inverter_serial_number)
+        return True
+
+    # First attempt failed — wait 5 s and retry once.
+    _LOGGER.warning(
+        "[HANCHUESS] Write Settings first attempt failed (%s), retrying in 5 s…",
+        result.get("msg"),
+    )
+    import asyncio as _asyncio
+    await _asyncio.sleep(5)
+    result = await client.async_device_control(inverter_serial_number, "2", snapshot)
+    if result.get("success"):
+        staging.clear()
+        _LOGGER.info("[HANCHUESS] Write Settings retry succeeded for %s", inverter_serial_number)
+        return True
+
+    # Both attempts failed — notify the user and leave the buffer intact.
+    _LOGGER.error(
+        "[HANCHUESS] Write Settings failed after retry for %s: %s",
+        inverter_serial_number,
+        result.get("msg"),
+    )
+    try:
+        hass.components.persistent_notification.async_create(
+            title="Hanchuess — Write Settings Failed",
+            message=(
+                f"Could not write settings to inverter **{inverter_serial_number}** after two attempts.\n\n"
+                f"Pending keys: `{', '.join(snapshot.keys())}`\n\n"
+                f"Error: {result.get('msg', 'Unknown error')}\n\n"
+                "The changes are still staged — press **Write Settings** again to retry."
+            ),
+            notification_id=f"hanchuess_write_failed_{inverter_serial_number}",
+        )
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("[HANCHUESS] Could not create persistent notification: %s", err)
+    return False
 async def _async_initial_refresh(coordinator, entry: ConfigEntry) -> None:
     """Run the first coordinator refresh in a state-safe way.
 
@@ -155,6 +226,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_iot_get)
     websocket_api.async_register_command(hass, ws_iot_set)
     websocket_api.async_register_command(hass, ws_fast_charge)
+    websocket_api.async_register_command(hass, ws_clear_staging)
 
     async def handle_device_control(call: ServiceCall):
         inverter_serial_number = call.data["sn"]
@@ -220,6 +292,36 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             vol.Required("act"): vol.All(int, vol.Range(min=-3, max=3)),
             vol.Optional("duration"): vol.All(int, vol.Range(min=0)),
         }),
+    )
+
+    async def handle_write_settings(call: ServiceCall):
+        """Flush staged settings for the specified (or only) inverter."""
+        sn = call.data.get("sn")
+        if sn:
+            target = _find_entry(hass, sn)
+            if not target:
+                _LOGGER.error("[HANCHUESS] write_settings: device %s not found", sn)
+                return
+            await async_flush_staged(hass, target)
+            return
+
+        all_entries = list(_iter_entry_runtime_data(hass))
+        if len(all_entries) == 1:
+            target_entry, _ = all_entries[0]
+            await async_flush_staged(hass, target_entry)
+        elif len(all_entries) == 0:
+            _LOGGER.error("[HANCHUESS] write_settings: no configured inverters found")
+        else:
+            _LOGGER.error(
+                "[HANCHUESS] write_settings: multiple inverters configured — "
+                "provide 'sn' to specify which one to flush"
+            )
+
+    hass.services.async_register(
+        DOMAIN,
+        "write_settings",
+        handle_write_settings,
+        schema=vol.Schema({vol.Optional("sn"): cv.string}),
     )
 
     return True
@@ -300,6 +402,29 @@ async def ws_fast_charge(hass, connection, msg):
         connection.send_result(msg["id"], result.get("data", {}))
     else:
         connection.send_error(msg["id"], "fast_charge_failed", result.get("msg", "Unknown error"))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hanchuess/clear_staging",
+    vol.Required("sn"): str,
+})
+@websocket_api.async_response
+async def ws_clear_staging(hass, connection, msg):
+    """Clear the staging buffer for the given inverter.
+
+    Called by the Lovelace card after a successful Load or Set so that the
+    HA Pending Changes sensor reflects the now-clean state.
+    """
+    inverter_serial_number = msg["sn"]
+    entry = _find_entry(hass, inverter_serial_number)
+    if entry is None:
+        connection.send_error(
+            msg["id"], "not_found", f"Device {inverter_serial_number} not found"
+        )
+        return
+    entry.runtime_data.staging.clear()
+    _LOGGER.debug("[HANCHUESS] Staging buffer cleared via WS for %s", inverter_serial_number)
+    connection.send_result(msg["id"], {})
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: HanchuessConfigEntry) -> bool:
@@ -407,6 +532,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HanchuessConfigEntry) ->
         battery=battery_coordinator,
         number_limits=number_limits,
         startup_values=startup_values,
+        staging=SettingsStagingBuffer(),
+        control_registry={},
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

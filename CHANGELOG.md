@@ -10,6 +10,81 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+### Added
+- `button.py` new integration platform registering the Read Settings and Write
+  Settings button entities.
+- **Read Settings** and **Write Settings** button entities on the inverter device.
+  - **Read Settings** calls `iotGet` for all control keys and refreshes the state
+    of every control entity (Work Mode, charge/discharge power limits, SOC limits,
+    all time slots) from the device.
+  - **Write Settings** flushes all staged changes to the device in a single
+    `iotSet` call. On failure it retries once after 5 s; if the retry also fails a
+    persistent HA notification is created listing the pending keys and the buffer is
+    left intact so the user can retry.
+- **Pending Changes** sensor entity — exposes the number of
+  staged-but-unwritten settings as a real-time HA sensor (unique ID
+  `{sn}_pending_settings_changes`). Useful for automations and dashboards.
+- **`hanchuess.write_settings` service** — flushes staged settings from an
+  automation. Accepts an optional `sn` field (defaults to the only configured
+  inverter; required when multiple inverters are configured).
+- `staging.py` — new `SettingsStagingBuffer` class that accumulates control-entity
+  changes in memory with no HA dependencies. Holds the pending payload, count, and
+  an `on_change` callback that drives the pending sensor.
+- **`hanchuess/clear_staging` WebSocket command** — lightweight command called by
+  the Lovelace card after a successful Load or Set to clear the HA staging buffer
+  without a second API call. Also usable from browser dev tools.
+
+### Changed
+- **All control entities now stage changes locally instead of calling `iotSet`
+  immediately.** Work Mode (`select`), charge/discharge power limits, SOC limits
+  (`number`), and all 12 charge/discharge time slots (`time`) write to the staging
+  buffer when changed in the UI or via automation. The device is only updated when
+  the user presses **Write Settings** or calls `hanchuess.write_settings`.
+- Lovelace card "Set" button (`hanchuess/iot_set` websocket): after a successful
+  direct write via the card, the HA staging buffer is now cleared so the two write
+  paths stay in sync.
+- `number.py`, `select.py`, `time.py`: removed the per-entity `async_device_control`
+  call from every write method. The revert-on-failure logic in `time.py` has also
+  been removed (no immediate API call means no immediate failure to revert from).
+- `HanchuessData` dataclass extended with two new fields: `staging`
+  (`SettingsStagingBuffer`) and `control_registry` (`dict[str, entity]`).
+- Each control entity registers itself in `control_registry` on
+  `async_added_to_hass`, exposing an `apply_value(raw)` method used by
+  `apply_iot_values` (called by Read Settings and in future read-back paths).
+- **Read Settings button** now clears the staging buffer after successfully
+  applying fresh device values, so `Pending Changes` drops to zero immediately
+  after a read.
+- **Lovelace card Load button** now calls `hanchuess/clear_staging` after a
+  successful `iotGet`, clearing the HA staging buffer in sync with the card's
+  own state.
+- **Lovelace card Set button** now explicitly calls `hanchuess/clear_staging`
+  after a successful `iotSet` via a shared `_clearStaging()` helper, replacing
+  the implicit server-side `staging.clear()` side-effect that previously lived
+  in `ws_iot_set`. Both card operations now use the same code path.
+- `ws_iot_set` no longer clears the staging buffer itself; the card is now
+  solely responsible for clearing after a direct write.
+- **Entity sections reorganised** to reduce clutter on the HA device page:
+  - **Configuration section** — Work Mode, all 5 number controls (charge/discharge
+    power limits, SOC limits, grid charge limit), all 12 charge/discharge time
+    slot entities.
+  - **Controls section** (default, no category) — Read Settings, Write Settings,
+    Fast Charge, Fast Discharge switches.
+  - **Diagnostic section** — Device Status, Pending Changes.
+- Migrated config entry state to Home Assistant's `runtime_data` pattern and moved
+  service registration to `async_setup`, satisfying the `runtime-data` and
+  `action-setup` Home Assistant Bronze quality-scale rules.
+- Sensors now always set `has_entity_name`, ensuring device-name prefixing is
+  consistent across all entities (`has-entity-name` rule).
+- Declared `"quality_scale": "bronze"` in `manifest.json`; all Bronze rules are now
+  met except `brands`, which is documented as pending an external PR to
+  `home-assistant/brands`.
+
+### ⚠️ Breaking change — Predbat bridge automations
+Control writes (time slots, work mode, power limits) **no longer reach the device
+immediately**. Any automation that sets a control entity and expects the device to
+act on it straight away must now call `hanchuess.write_settings` after the write:
+
+
 ## [1.4.1] - 2026-07-13
 
 ### Fixed
