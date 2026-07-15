@@ -243,7 +243,7 @@ BATTERY_SENSORS = {
     },
     "battery_design_capacity": {
         "key": "designCapacity",
-        "state_class": SensorStateClass.TOTAL,
+        "state_class": SensorStateClass.MEASUREMENT,
         "unit": UnitOfEnergy.KILO_WATT_HOUR,
         "icon": "mdi:battery-high",
     },
