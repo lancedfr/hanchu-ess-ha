@@ -10,6 +10,8 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+## [v2.0.0] 2026-07-15
+
 ### Added
 - `button.py` new integration platform registering the Read Settings and Write
   Settings button entities.
@@ -255,7 +257,8 @@ act on it straight away must now call `hanchuess.write_settings` after the write
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.1...v2.0.0
 [1.4.1]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.2.12...v1.3.0
