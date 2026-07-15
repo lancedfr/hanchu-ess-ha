@@ -3,6 +3,7 @@ import asyncio
 import logging
 from datetime import time
 from homeassistant.components.time import TimeEntity
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
@@ -85,19 +86,32 @@ async def async_setup_entry(
     startup_values = data.startup_values
 
     entities = [
-        HanchuessTimeSlot(client, entry, slot_key, config, startup_values)
+        HanchuessTimeSlot(entry, slot_key, config, startup_values)
         for slot_key, config in TIME_SLOTS.items()
     ]
     async_add_entities(entities)
+
+
+def _decode_time_value(raw) -> time:
+    """Decode a raw iotGet seconds-since-midnight value to a time object."""
+    if raw is None:
+        return time(0, 0)
+    try:
+        total_seconds = int(float(raw))
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return time(hours, minutes)
+    except (ValueError, TypeError):
+        return time(0, 0)
 
 
 class HanchuessTimeSlot(TimeEntity):
     """Represents a charge or discharge time slot for Hanchuess."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, client, entry, slot_key, config, startup_values):
-        self._client = client
+    def __init__(self, entry, slot_key, config, startup_values):
         self._entry = entry
         self._config = config
         self._attr_name = config["name"]
@@ -106,21 +120,13 @@ class HanchuessTimeSlot(TimeEntity):
         self._attr_icon = config["icon"]
         self._debounce_task = None
         self._pending_value = None
+        self._attr_native_value = _decode_time_value(
+            startup_values.get(config["control_key"])
+        )
 
-        # Set initial value from startup read
-        raw = startup_values.get(config["control_key"])
-        if raw is not None:
-            try:
-                total_seconds = int(float(raw))
-                hours = total_seconds // 3600
-                minutes = (total_seconds % 3600) // 60
-                self._attr_native_value = time(hours, minutes)
-            except (ValueError, TypeError):
-                self._attr_native_value = time(0, 0)
-        else:
-            self._attr_native_value = time(0, 0)
-
-        self._last_confirmed_value = self._attr_native_value
+    async def async_added_to_hass(self) -> None:
+        """Register with the control registry for apply_iot_values support."""
+        self._entry.runtime_data.control_registry[self._config["control_key"]] = self
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -132,8 +138,12 @@ class HanchuessTimeSlot(TimeEntity):
             model="ESS Device",
         )
 
+    def apply_value(self, raw) -> None:
+        """Apply a raw iotGet value to this entity's state (no HA state write)."""
+        self._attr_native_value = _decode_time_value(raw)
+
     async def async_set_value(self, value: time) -> None:
-        """Debounce time slot changes to avoid multiple API calls."""
+        """Debounce time slot changes to coalesce rapid adjustments into one stage call."""
         self._pending_value = value
         self._attr_native_value = value
         self.async_write_ha_state()
@@ -144,31 +154,21 @@ class HanchuessTimeSlot(TimeEntity):
         self._debounce_task = asyncio.ensure_future(self._send_after_delay())
 
     async def _send_after_delay(self) -> None:
-        """Wait for debounce period then send to API."""
+        """Wait for debounce period then stage the value."""
         try:
             await asyncio.sleep(DEBOUNCE_SECONDS)
             value = self._pending_value
             if value is None:
                 return
             seconds = (value.hour * 3600) + (value.minute * 60)
-            inverter_serial_number = self._entry.data["sn"]
-            result = await self._client.async_device_control(
-                inverter_serial_number,
-                "2",
-                {self._config["control_key"]: seconds},
+            self._entry.runtime_data.staging.stage(
+                self._config["control_key"], seconds
             )
-            if result and result.get("success"):
-                _LOGGER.info("[HANCHUESS] %s set to %s seconds", self._config["name"], seconds)
-                self._pending_value = None
-                self._last_confirmed_value = value
-            else:
-                _LOGGER.error(
-                    "[HANCHUESS] Failed to set %s: %s — reverting displayed state",
-                    self._config["name"],
-                    result.get("msg") if result else "no response",
-                )
-                self._pending_value = None
-                self._attr_native_value = self._last_confirmed_value
-                self.async_write_ha_state()
+            _LOGGER.info(
+                "[HANCHUESS] %s staged: %s seconds (pending write)",
+                self._config["name"],
+                seconds,
+            )
+            self._pending_value = None
         except asyncio.CancelledError:
             pass

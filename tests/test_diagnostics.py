@@ -49,12 +49,15 @@ class _FakeEntry:
 
 def _make_runtime_data(**overrides):
     """Build a HanchuessData with sensible defaults for fields a test doesn't set."""
+    from custom_components.hanchuess.staging import SettingsStagingBuffer
     defaults = {
         "realtime": SimpleNamespace(data={}),
         "statistics": SimpleNamespace(data={}),
         "battery": None,
         "number_limits": {},
         "startup_values": {},
+        "staging": SettingsStagingBuffer(),
+        "control_registry": {},
     }
     defaults.update(overrides)
     return HanchuessData(**defaults)

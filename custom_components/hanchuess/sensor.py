@@ -7,6 +7,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    EntityCategory,
     PERCENTAGE,
     UnitOfPower,
     UnitOfEnergy,
@@ -466,6 +467,8 @@ async def async_setup_entry(
                     BatterySensor(battery_coordinator, entry, battery_serial, sensor_key, config)
                 )
     async_add_entities(entities)
+    # Add the pending settings count sensor (no coordinator — driven by staging buffer)
+    async_add_entities([HanchuessSettingsPendingSensor(entry)])
 
 
 class HanchueSensor(CoordinatorEntity, SensorEntity):
@@ -568,6 +571,7 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "device_status"
     _attr_icon = "mdi:check-circle"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
@@ -634,3 +638,47 @@ class DeviceStatusSensor(CoordinatorEntity, SensorEntity):
             self._work_mode_options = parsed["work_mode_options"]
             self._energy_fields = parsed["fields"]
             self._menu_loaded = True
+
+
+
+class HanchuessSettingsPendingSensor(SensorEntity):
+    """Sensor that exposes the number of staged-but-unwritten settings changes.
+
+    Driven by the SettingsStagingBuffer's on_change callback rather than a
+    polling coordinator, so it updates immediately whenever a control entity
+    stages a value or the buffer is cleared.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Pending Changes"
+    _attr_icon = "mdi:content-save-edit"
+    _attr_state_class = None  # count, not a time-series measurement
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry) -> None:
+        self._entry = entry
+        inverter_serial_number = entry.data["sn"]
+        self._attr_unique_id = f"{inverter_serial_number}_pending_settings_changes"
+
+    async def async_added_to_hass(self) -> None:
+        """Register as the staging buffer's on_change callback."""
+        self._entry.runtime_data.staging.set_on_change(self._on_staging_change)
+
+    def _on_staging_change(self) -> None:
+        """Called by the staging buffer whenever pending changes."""
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of pending (unwritten) staged settings."""
+        return self._entry.runtime_data.staging.count
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        inverter_serial_number = self._entry.data["sn"]
+        return DeviceInfo(
+            identifiers={(DOMAIN, inverter_serial_number)},
+            name=f"Hanchuess {inverter_serial_number}",
+            manufacturer="Hanchu",
+            model="ESS Device",
+        )

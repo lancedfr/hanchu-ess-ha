@@ -39,9 +39,43 @@ This fork extends the original guoxiatech/hanchu-ess-ha integration — publishe
 - **Fast Charge** switch
 - **Fast Discharge** switch
 
+### Settings management
+Changes to all control entities above are **staged locally** and only sent to the
+device when you press **Write Settings** (or call the `hanchuess.write_settings`
+service). This batches all pending changes into a single `iotSet` API call,
+avoiding Hanchu's rate limiter.
+
+- **Read Settings** button — calls `iotGet` for all control keys and refreshes
+  every control entity's state from the device. Also runs automatically at startup.
+- **Write Settings** button — flushes all staged changes to the device in one
+  `iotSet` call. Retries once on failure; creates a persistent notification if the
+  retry also fails, leaving the buffer intact to retry later.
+- **Pending Changes** sensor — shows the count of staged-but-unwritten
+  changes (0 when clean). Useful for dashboards and automations.
+
 ## Services
 
 In addition to the automatable entities above, this integration exposes two HA services for advanced use.
+
+### `hanchuess.write_settings`
+
+Flush all staged control-entity changes to the device in a single `iotSet` call.
+Useful in automations that set time slots or other controls and need to ensure the
+device receives the update without the user pressing the Write Settings button.
+
+| Field | Required | Description |
+|---|---|---|
+| `sn` | No | Inverter serial number. Defaults to your only configured inverter if omitted; required when multiple inverters are configured. |
+
+Example automation action:
+```yaml
+- action: time.set_value
+  target:
+    entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
+  data:
+    time: "06:00:00"
+- action: hanchuess.write_settings
+```
 
 ### `hanchuess.fast_charge`
 
@@ -199,7 +233,11 @@ discharge_stop_service:
 ```
 
 ## Predbat bridge automations
-Predbat controls charge/discharge by setting time slots. Add these automations to wire Predbat to the integration:
+Predbat controls charge/discharge by setting time slots. Add these automations to wire Predbat to the integration.
+
+> **Note:** Control entity writes are now staged locally and only sent to the device
+> when flushed. Each automation below includes a `hanchuess.write_settings` step to
+> flush the staged changes to the device immediately after setting the time slots.
 
 ```yaml
 alias: Predbat Bridge - Start Charge
@@ -218,6 +256,7 @@ actions:
       entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
     data:
       time: "11:00:00"
+  - action: hanchuess.write_settings
 
 alias: Predbat Bridge - Stop Charge
 triggers:
@@ -235,6 +274,7 @@ actions:
       entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
     data:
       time: "00:00:00"
+  - action: hanchuess.write_settings
 
 alias: Predbat Bridge - Start Discharge
 triggers:
@@ -252,6 +292,7 @@ actions:
       entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
     data:
       time: "23:59:00"
+  - action: hanchuess.write_settings
 
 alias: Predbat Bridge - Stop Discharge
 triggers:
@@ -269,6 +310,7 @@ actions:
       entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
     data:
       time: "00:00:00"
+  - action: hanchuess.write_settings
 ```
 Replace YOURSERIAL with your device serial number throughout.
 
@@ -511,6 +553,10 @@ instructions, CI checks, and the contribution workflow are documented in
 ## Known Limitations
 
 - Token refresh is handled automatically every 25 days
+- Control entity changes (Work Mode, power limits, SOC limits, time slots) are
+  **staged locally** and only written to the device when you press **Write Settings**
+  or call `hanchuess.write_settings`. Existing automations that write these entities
+  must be updated to add a `hanchuess.write_settings` call after the write sequence.
 
 ## Diagnostics
 

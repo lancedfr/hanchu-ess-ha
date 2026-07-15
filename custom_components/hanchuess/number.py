@@ -1,7 +1,7 @@
 """Number platform for Hanchuess."""
 import logging
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.const import UnitOfPower, PERCENTAGE
+from homeassistant.const import EntityCategory, UnitOfPower, PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import DeviceInfo
@@ -57,10 +57,20 @@ async def async_setup_entry(
     number_limits = data.number_limits
     startup_values = data.startup_values
     entities = [
-        HanchuessNumber(client, entry, number_key, config, number_limits, startup_values)
+        HanchuessNumber(entry, number_key, config, number_limits, startup_values)
         for number_key, config in NUMBERS.items()
     ]
     async_add_entities(entities)
+
+
+def _decode_number_value(raw) -> float | None:
+    """Decode a raw iotGet value to a float, or None on failure."""
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        return None
 
 
 class HanchuessNumber(NumberEntity):
@@ -68,9 +78,9 @@ class HanchuessNumber(NumberEntity):
 
     _attr_has_entity_name = True
     _attr_mode = NumberMode.BOX
+    _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, client, entry, number_key, config, number_limits, startup_values):
-        self._client = client
+    def __init__(self, entry, number_key, config, number_limits, startup_values):
         self._entry = entry
         self._config = config
         self._attr_name = config["name"]
@@ -86,14 +96,13 @@ class HanchuessNumber(NumberEntity):
         self._attr_native_max_value = limits.get("max", 5000)
 
         # Set initial value from startup read
-        value = startup_values.get(config["control_key"])
-        if value is not None:
-            try:
-                self._attr_native_value = float(value)
-            except (ValueError, TypeError):
-                self._attr_native_value = None
-        else:
-            self._attr_native_value = None
+        self._attr_native_value = _decode_number_value(
+            startup_values.get(config["control_key"])
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Register with the control registry for apply_iot_values support."""
+        self._entry.runtime_data.control_registry[self._config["control_key"]] = self
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -105,18 +114,21 @@ class HanchuessNumber(NumberEntity):
             model="ESS Device",
         )
 
-    async def async_set_native_value(self, value: float) -> None:
-        inverter_serial_number = self._entry.data["sn"]
-        result = await self._client.async_device_control(
-            inverter_serial_number,
-            "2",
-            {self._config["control_key"]: int(value)},
-        )
-        if result.get("success"):
+    def apply_value(self, raw) -> None:
+        """Apply a raw iotGet value to this entity's state (no HA state write)."""
+        value = _decode_number_value(raw)
+        if value is not None:
             self._attr_native_value = value
-            self.async_write_ha_state()
-            _LOGGER.info("[HANCHUESS] %s set to %s", self._config["name"], value)
-        else:
-            _LOGGER.error(
-                "Failed to set %s: %s", self._config["name"], result.get("msg")
-            )
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Stage the new value; do not call iotSet directly."""
+        self._entry.runtime_data.staging.stage(
+            self._config["control_key"], int(value)
+        )
+        self._attr_native_value = value
+        self.async_write_ha_state()
+        _LOGGER.info(
+            "[HANCHUESS] %s staged: %s (pending write)",
+            self._config["name"],
+            value,
+        )

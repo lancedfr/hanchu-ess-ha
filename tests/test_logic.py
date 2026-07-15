@@ -49,6 +49,17 @@ class _FakeOptionsEntry:
         self.options = options or {}
 
 
+class _FakeEntryWithStaging:
+    """Fake config entry that carries a real SettingsStagingBuffer."""
+
+    def __init__(self, sn="SN1"):
+        from custom_components.hanchuess.staging import SettingsStagingBuffer as _SSB
+        self.data = {"sn": sn}
+        self.runtime_data = MagicMock()
+        self.runtime_data.staging = _SSB()
+        self.runtime_data.control_registry = {}
+
+
 def _make_sensor(config, value, unit=None):
     """Build a HanchueSensor backed by a fake coordinator carrying one value.
 
@@ -404,9 +415,13 @@ def test_parse_energy_menu_bad_work_mode_json_is_tolerated():
 
 def _make_slot(startup_values, client=None):
     config = TIME_SLOTS["charge_slot_1_start"]  # control_key TCT_START_1
-    return HanchuessTimeSlot(
-        client or MagicMock(), _FakeEntry(), "charge_slot_1_start", config, startup_values
-    )
+    entry = _FakeEntryWithStaging()
+    slot = HanchuessTimeSlot(entry, "charge_slot_1_start", config, startup_values)
+    # If a client was supplied by an older test, stash it for reference but
+    # it is no longer used by the entity (writes go to staging).
+    if client is not None:
+        slot._test_client = client
+    return slot
 
 
 def test_time_slot_decodes_seconds_to_time():
@@ -431,13 +446,299 @@ def test_time_slot_missing_value_defaults_to_midnight():
 
 async def test_time_slot_encodes_time_to_seconds_on_send(monkeypatch):
     monkeypatch.setattr(time_mod, "DEBOUNCE_SECONDS", 0)
-    client = MagicMock()
-    client.async_device_control = AsyncMock(return_value={"success": True})
-    slot = _make_slot({}, client=client)
+    slot = _make_slot({})
+    slot.hass = MagicMock()
+    slot.async_write_ha_state = MagicMock()
     slot._pending_value = dt_time(2, 30)  # 9000 seconds
 
     await slot._send_after_delay()
 
-    client.async_device_control.assert_awaited_once_with(
-        "SN1", "2", {"TCT_START_1": 9000}
-    )
+    # Under staged writes, value goes into staging buffer, not direct API call.
+    assert slot._entry.runtime_data.staging.pending == {"TCT_START_1": 9000}
+
+
+
+# ---------------------------------------------------------------------------
+# SettingsStagingBuffer
+# ---------------------------------------------------------------------------
+
+from custom_components.hanchuess.staging import SettingsStagingBuffer
+
+
+def test_staging_stage_adds_entry():
+    buf = SettingsStagingBuffer()
+    buf.stage("CHG_PWR_LMT", 2000)
+    assert buf.pending == {"CHG_PWR_LMT": 2000}
+
+
+def test_staging_stage_updates_existing_entry():
+    buf = SettingsStagingBuffer()
+    buf.stage("CHG_PWR_LMT", 2000)
+    buf.stage("CHG_PWR_LMT", 3000)
+    assert buf.pending == {"CHG_PWR_LMT": 3000}
+
+
+def test_staging_stage_triggers_on_change():
+    buf = SettingsStagingBuffer()
+    calls = []
+    buf.set_on_change(lambda: calls.append(1))
+    buf.stage("CHG_PWR_LMT", 2000)
+    assert calls == [1]
+
+
+def test_staging_clear_empties_buffer():
+    buf = SettingsStagingBuffer()
+    buf.stage("CHG_PWR_LMT", 2000)
+    buf.stage("WORK_MODE_CMB", "1")
+    buf.clear()
+    assert buf.pending == {}
+
+
+def test_staging_clear_triggers_on_change():
+    buf = SettingsStagingBuffer()
+    buf.stage("CHG_PWR_LMT", 2000)
+    calls = []
+    buf.set_on_change(lambda: calls.append(1))
+    buf.clear()
+    assert calls == [1]
+
+
+def test_staging_snapshot_returns_copy():
+    buf = SettingsStagingBuffer()
+    buf.stage("CHG_PWR_LMT", 2000)
+    snap = buf.snapshot()
+    snap["CHG_PWR_LMT"] = 9999  # mutate copy
+    assert buf.pending["CHG_PWR_LMT"] == 2000  # original unchanged
+
+
+def test_staging_snapshot_contains_all_entries():
+    buf = SettingsStagingBuffer()
+    buf.stage("A", 1)
+    buf.stage("B", 2)
+    assert buf.snapshot() == {"A": 1, "B": 2}
+
+
+def test_staging_count_reflects_pending():
+    buf = SettingsStagingBuffer()
+    assert buf.count == 0
+    buf.stage("A", 1)
+    assert buf.count == 1
+    buf.stage("B", 2)
+    assert buf.count == 2
+    buf.clear()
+    assert buf.count == 0
+
+
+def test_staging_no_on_change_does_not_raise():
+    """Calling stage/clear without registering on_change must not raise."""
+    buf = SettingsStagingBuffer()
+    buf.stage("X", 42)
+    buf.clear()
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — entity staging: entities call staging.stage(), not async_device_control
+# ---------------------------------------------------------------------------
+
+from custom_components.hanchuess.number import HanchuessNumber, NUMBERS, _decode_number_value
+from custom_components.hanchuess.select import WorkModeSelect, _decode_work_mode
+from custom_components.hanchuess.time import HanchuessTimeSlot as _TimeSlot2, _decode_time_value
+
+
+def _make_number(control_key="CHG_PWR_LMT", entry=None):
+    if entry is None:
+        entry = _FakeEntryWithStaging()
+    config = next(c for c in NUMBERS.values() if c["control_key"] == control_key)
+    number_key = next(k for k, c in NUMBERS.items() if c["control_key"] == control_key)
+    return HanchuessNumber(entry, number_key, config, {control_key: {"min": 0, "max": 5000}}, {})
+
+
+def _make_select(entry=None):
+    if entry is None:
+        entry = _FakeEntryWithStaging()
+    return WorkModeSelect(entry, {})
+
+
+def _make_time_slot_v2(startup_values=None, entry=None):
+    if entry is None:
+        entry = _FakeEntryWithStaging()
+    config = TIME_SLOTS["charge_slot_1_start"]
+    return _TimeSlot2(entry, "charge_slot_1_start", config, startup_values or {})
+
+
+# -- _decode_number_value --
+
+def test_decode_number_value_float_string():
+    assert _decode_number_value("2000") == 2000.0
+
+
+def test_decode_number_value_int():
+    assert _decode_number_value(3000) == 3000.0
+
+
+def test_decode_number_value_none_returns_none():
+    assert _decode_number_value(None) is None
+
+
+def test_decode_number_value_bad_string_returns_none():
+    assert _decode_number_value("bad") is None
+
+
+# -- _decode_work_mode --
+
+def test_decode_work_mode_known_value():
+    assert _decode_work_mode("1") == "Self-consumption"
+
+
+def test_decode_work_mode_unknown_returns_none():
+    assert _decode_work_mode("99") is None
+
+
+def test_decode_work_mode_none_returns_none():
+    assert _decode_work_mode(None) is None
+
+
+# -- _decode_time_value --
+
+def test_decode_time_value_seconds():
+    assert _decode_time_value(3600) == dt_time(1, 0)
+
+
+def test_decode_time_value_string():
+    assert _decode_time_value("9000") == dt_time(2, 30)
+
+
+def test_decode_time_value_none_returns_midnight():
+    assert _decode_time_value(None) == dt_time(0, 0)
+
+
+def test_decode_time_value_bad_returns_midnight():
+    assert _decode_time_value("garbage") == dt_time(0, 0)
+
+
+# -- HanchuessNumber staging --
+
+async def test_number_stages_value_not_calls_api():
+    entry = _FakeEntryWithStaging()
+    number = _make_number(entry=entry)
+    number.hass = MagicMock()
+    number.async_write_ha_state = MagicMock()
+
+    await number.async_set_native_value(2500.0)
+
+    assert entry.runtime_data.staging.pending == {"CHG_PWR_LMT": 2500}
+    assert number._attr_native_value == 2500.0
+
+
+async def test_number_does_not_call_async_device_control():
+    entry = _FakeEntryWithStaging()
+    number = _make_number(entry=entry)
+    number.hass = MagicMock()
+    number.async_write_ha_state = MagicMock()
+    client = AsyncMock()
+
+    await number.async_set_native_value(1000.0)
+
+    client.async_device_control.assert_not_awaited()
+
+
+# -- WorkModeSelect staging --
+
+async def test_select_stages_work_mode_not_calls_api():
+    entry = _FakeEntryWithStaging()
+    sel = _make_select(entry=entry)
+    sel.hass = MagicMock()
+    sel.async_write_ha_state = MagicMock()
+
+    await sel.async_select_option("Backup Energy")
+
+    assert entry.runtime_data.staging.pending == {"WORK_MODE_CMB": "2"}
+    assert sel._attr_current_option == "Backup Energy"
+
+
+async def test_select_unknown_option_does_not_stage():
+    entry = _FakeEntryWithStaging()
+    sel = _make_select(entry=entry)
+    sel.hass = MagicMock()
+    sel.async_write_ha_state = MagicMock()
+
+    await sel.async_select_option("NonExistent")
+
+    assert entry.runtime_data.staging.pending == {}
+
+
+# -- HanchuessTimeSlot staging --
+
+async def test_time_slot_stages_value_after_debounce(monkeypatch):
+    import custom_components.hanchuess.time as time_mod2
+    monkeypatch.setattr(time_mod2, "DEBOUNCE_SECONDS", 0)
+    entry = _FakeEntryWithStaging()
+    slot = _make_time_slot_v2(entry=entry)
+    slot.hass = MagicMock()
+    slot.async_write_ha_state = MagicMock()
+
+    slot._pending_value = dt_time(2, 30)  # 9000 seconds
+    await slot._send_after_delay()
+
+    assert entry.runtime_data.staging.pending == {"TCT_START_1": 9000}
+
+
+async def test_time_slot_does_not_call_async_device_control(monkeypatch):
+    import custom_components.hanchuess.time as time_mod2
+    monkeypatch.setattr(time_mod2, "DEBOUNCE_SECONDS", 0)
+    entry = _FakeEntryWithStaging()
+    slot = _make_time_slot_v2(entry=entry)
+    slot.hass = MagicMock()
+    slot.async_write_ha_state = MagicMock()
+    client = AsyncMock()
+
+    slot._pending_value = dt_time(1, 0)
+    await slot._send_after_delay()
+
+    client.async_device_control.assert_not_awaited()
+
+# ---------------------------------------------------------------------------
+# Task 3 — HanchuessSettingsPendingSensor
+# ---------------------------------------------------------------------------
+
+from custom_components.hanchuess.sensor import HanchuessSettingsPendingSensor
+
+
+def _make_pending_sensor(sn="SN1"):
+    entry = _FakeEntryWithStaging(sn)
+    sensor = HanchuessSettingsPendingSensor(entry)
+    # Simulate async_added_to_hass registration inline.
+    entry.runtime_data.staging.set_on_change(sensor._on_staging_change)
+    sensor.async_write_ha_state = MagicMock()
+    return sensor, entry
+
+
+def test_pending_sensor_initial_value_is_zero():
+    sensor, _ = _make_pending_sensor()
+    assert sensor.native_value == 0
+
+
+def test_pending_sensor_reflects_staged_count():
+    sensor, entry = _make_pending_sensor()
+    entry.runtime_data.staging.stage("CHG_PWR_LMT", 2000)
+    assert sensor.native_value == 1
+    entry.runtime_data.staging.stage("DSCHG_PWR_LMT", 3000)
+    assert sensor.native_value == 2
+
+
+def test_pending_sensor_on_change_triggers_write_ha_state():
+    sensor, entry = _make_pending_sensor()
+    entry.runtime_data.staging.stage("CHG_PWR_LMT", 2000)
+    sensor.async_write_ha_state.assert_called()
+
+
+def test_pending_sensor_resets_to_zero_after_clear():
+    sensor, entry = _make_pending_sensor()
+    entry.runtime_data.staging.stage("CHG_PWR_LMT", 2000)
+    entry.runtime_data.staging.clear()
+    assert sensor.native_value == 0
+
+
+def test_pending_sensor_unique_id():
+    sensor, _ = _make_pending_sensor("MYSERIAL")
+    assert sensor.unique_id == "MYSERIAL_pending_settings_changes"
