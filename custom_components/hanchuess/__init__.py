@@ -5,7 +5,7 @@ import asyncio
 from dataclasses import dataclass
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.components import websocket_api
 from homeassistant.exceptions import ConfigEntryNotReady
 import homeassistant.helpers.config_validation as cv
@@ -133,6 +133,39 @@ async def async_flush_staged(hass: HomeAssistant, entry) -> bool:
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning("[HANCHUESS] Could not create persistent notification: %s", err)
     return False
+
+
+async def async_device_control_service(hass: HomeAssistant, call: ServiceCall) -> dict:
+    """Handle the `hanchuess.device_control` service call.
+
+    Returns {"success": bool, "message": str} so automations can inspect the
+    outcome via `response_variable`.
+    """
+    inverter_serial_number = call.data["sn"]
+    dev_type = call.data["dev_type"]
+    value = call.data["value"]
+    _LOGGER.info(
+        "[HANCHUESS] service device_control: %s %s",
+        inverter_serial_number,
+        value,
+    )
+    coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
+    if not coordinator:
+        message = f"Device {inverter_serial_number} not found"
+        _LOGGER.error("[HANCHUESS] device_control: %s", message)
+        return {"success": False, "message": message}
+
+    result = await coordinator.client.async_device_control(
+        inverter_serial_number, dev_type, value
+    )
+    if result.get("success"):
+        return {"success": True, "message": "OK"}
+
+    message = result.get("msg", "Unknown error")
+    _LOGGER.error("[HANCHUESS] device_control failed: %s", message)
+    return {"success": False, "message": message}
+
+
 async def _async_initial_refresh(coordinator, entry: ConfigEntry) -> None:
     """Run the first coordinator refresh in a state-safe way.
 
@@ -229,29 +262,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_clear_staging)
 
     async def handle_device_control(call: ServiceCall):
-        inverter_serial_number = call.data["sn"]
-        dev_type = call.data["dev_type"]
-        value = call.data["value"]
-        _LOGGER.info(
-            "[HANCHUESS] service device_control: %s %s",
-            inverter_serial_number,
-            value,
-        )
-        coordinator = _find_realtime_coordinator(hass, inverter_serial_number)
-        if not coordinator:
-            _LOGGER.error(
-                "[HANCHUESS] device_control: device %s not found",
-                inverter_serial_number,
-            )
-            return
-        result = await coordinator.client.async_device_control(
-            inverter_serial_number, dev_type, value
-        )
-        if not result.get("success"):
-            _LOGGER.error("[HANCHUESS] device_control failed: %s", result.get("msg"))
+        return await async_device_control_service(hass, call)
 
     hass.services.async_register(
-        DOMAIN, SERVICE_DEVICE_CONTROL, handle_device_control, schema=SERVICE_SCHEMA
+        DOMAIN,
+        SERVICE_DEVICE_CONTROL,
+        handle_device_control,
+        schema=SERVICE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     async def handle_fast_charge(call: ServiceCall):

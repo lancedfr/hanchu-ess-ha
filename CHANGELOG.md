@@ -78,6 +78,11 @@ later versions are tracked here going forward.
 - Declared `"quality_scale": "bronze"` in `manifest.json`; all Bronze rules are now
   met except `brands`, which is documented as pending an external PR to
   `home-assistant/brands`.
+- **`hanchuess.device_control` service now returns a response** —
+  `{"success": bool, "message": str}` — so automations can read
+  `response_variable` to know whether the write succeeded and, if not, why.
+  Registered with `supports_response: optional`, so calls that don't request a
+  response are unaffected.
 
 ### ⚠️ Breaking change — Predbat bridge automations
 Control writes (time slots, work mode, power limits) **no longer reach the device
