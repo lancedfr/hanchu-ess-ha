@@ -20,15 +20,6 @@ device_control:
       required: true
       selector:
         object:
-  response:
-    optional: true
-    fields:
-      success:
-        name: Success
-        description: Whether the control command succeeded.
-      message:
-        name: Message
-        description: OK on success, or an explanation of why the command failed.
 fast_charge:
   name: Fast Charge/Discharge
   description: Trigger fast charge or discharge on the Hanchu inverter for a set duration.
