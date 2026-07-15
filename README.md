@@ -233,113 +233,20 @@ discharge_stop_service:
 ```
 
 ## Predbat bridge automations
-Predbat controls charge/discharge by setting time slots. Add these automations to wire Predbat to the integration.
 
-> **Note:** Control entity writes are now staged locally and only sent to the device
-> when flushed. Each automation below includes a `hanchuess.write_settings` step to
-> flush the staged changes to the device immediately after setting the time slots.
+Predbat controls charge/discharge by setting time slots. The recommended approach
+uses the `hanchuess.device_control` service directly rather than the individual
+`time.set_value` entity calls — this writes both start and end times to the device
+in a single atomic API call (avoiding any intermediate state where only one of the
+two has been updated), and returns a response you can use to verify the write
+succeeded and retry on failure.
 
-```yaml
-alias: Predbat Bridge - Start Charge
-triggers:
-  - entity_id: input_boolean.predbat_charge_start
-    to: "on"
-    trigger: state
-actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
-    data:
-      time: "{{ now().strftime('%H:%M:%S') }}"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
-    data:
-      time: "11:00:00"
-  - action: hanchuess.write_settings
-
-alias: Predbat Bridge - Stop Charge
-triggers:
-  - entity_id: input_boolean.predbat_charge_start
-    to: "off"
-    trigger: state
-actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
-    data:
-      time: "00:00:00"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
-    data:
-      time: "00:00:00"
-  - action: hanchuess.write_settings
-
-alias: Predbat Bridge - Start Discharge
-triggers:
-  - entity_id: input_boolean.predbat_discharge_start
-    to: "on"
-    trigger: state
-actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
-    data:
-      time: "{{ now().strftime('%H:%M:%S') }}"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
-    data:
-      time: "23:59:00"
-  - action: hanchuess.write_settings
-
-alias: Predbat Bridge - Stop Discharge
-triggers:
-  - entity_id: input_boolean.predbat_discharge_start
-    to: "off"
-    trigger: state
-actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
-    data:
-      time: "00:00:00"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
-    data:
-      time: "00:00:00"
-  - action: hanchuess.write_settings
-```
-Replace YOURSERIAL with your device serial number throughout.
-
-### Known issue: silent write failures on Hanchu's cloud API
-
-Hanchu's `iotSet` endpoint can occasionally time out or silently drop an
-individual field write during a burst of calls, without the integration or
-Hanchu's own server logging it as a failure in every case. In one observed
-incident, a "Stop Discharge" call successfully switched the discharge
-schedule to Off, but the paired end-time write for the same slot timed out
-and was never retried — leaving the inverter still discharging on its
-previous schedule for over an hour, with no error surfaced anywhere except
-an ERROR line in the HA log.
-
-The bridge automations above do not detect this. Each writes a paired
-start/end register in two separate calls, and a partial failure leaves
-whatever value was already in the untouched register — which could be a
-live time left over from a previous cycle, not a safe default. There is no
-bridge direction where a partial failure is guaranteed harmless, so if
-reliability against this failure mode matters to you, use the hardened
-versions below for all four instead.
-
-They read back the actual device state ~90 seconds after writing, retry
-once if it doesn't match, and notify you if the retry also fails. Note
-these use `condition: template` rather than `condition: state` — HA
-validates `condition: state`'s `entity_id` as a literal entity ID at
-config-parse time, so it rejects a templated value like
-`{{ repeat.item.entity_id }}` even though templates work fine elsewhere in
-an action sequence.
+> **Note:** As of v2.0.0, control entities (time slots, Work Mode, number entities)
+> stage changes locally rather than writing immediately — see
+> [Settings management](#settings-management). Automations that need an
+> **immediate, verified write** (like this Predbat bridge) should call
+> `hanchuess.device_control` directly instead, since it bypasses staging entirely
+> and writes straight to the device.
 
 ```yaml
 alias: Predbat Bridge - Start Charge
@@ -348,52 +255,41 @@ triggers:
     to: "on"
     trigger: state
 variables:
-  target_start: "{{ now().strftime('%H:%M:%S') }}"
-  target_end: "11:00:00"
+  start_seconds: "{{ (now() - now().replace(hour=0, minute=0, second=0, microsecond=0)).seconds }}"
+  end_seconds: 39600  # 11:00:00
 actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
+  - action: hanchuess.device_control
     data:
-      time: "{{ target_start }}"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
-    data:
-      time: "{{ target_end }}"
-  - delay:
-      seconds: 90
-  - repeat:
-      for_each:
-        - entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
-          name: "Charge Slot 1 Start"
-          target: "{{ target_start }}"
-        - entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
-          name: "Charge Slot 1 End"
-          target: "{{ target_end }}"
-      sequence:
-        - if:
-            - condition: template
-              value_template: "{{ states(repeat.item.entity_id) != repeat.item.target }}"
-          then:
-            - action: time.set_value
-              target:
-                entity_id: "{{ repeat.item.entity_id }}"
-              data:
-                time: "{{ repeat.item.target }}"
-            - delay:
-                seconds: 30
-            - if:
-                - condition: template
-                  value_template: "{{ states(repeat.item.entity_id) != repeat.item.target }}"
-              then:
-                - action: notify.mobile_app_YOUR_DEVICE
-                  data:
-                    title: "⚠️ Hanchu charge start FAILED"
-                    message: >-
-                      {{ repeat.item.name }} still not {{ repeat.item.target }}
-                      after retry — charge window may be wrong or stale from a
-                      previous cycle, check manually.
+      sn: YOURSERIAL
+      dev_type: "2"
+      value:
+        TCT_START_1: "{{ start_seconds }}"
+        TCT_END_1: "{{ end_seconds }}"
+    response_variable: result
+  - if:
+      - condition: template
+        value_template: "{{ not result.success }}"
+    then:
+      - delay:
+          seconds: 5
+      - action: hanchuess.device_control
+        data:
+          sn: YOURSERIAL
+          dev_type: "2"
+          value:
+            TCT_START_1: "{{ start_seconds }}"
+            TCT_END_1: "{{ end_seconds }}"
+        response_variable: result2
+      - if:
+          - condition: template
+            value_template: "{{ not result2.success }}"
+        then:
+          - action: notify.notify
+            data:
+              title: ⚠️ Hanchu charge start FAILED
+              message: >-
+                Charge start/end write failed after retry ({{ result2.message }}) —
+                charge window may not be set, check manually.
 
 alias: Predbat Bridge - Stop Charge
 triggers:
@@ -401,46 +297,36 @@ triggers:
     to: "off"
     trigger: state
 actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
+  - action: hanchuess.device_control
     data:
-      time: "00:00:00"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
-    data:
-      time: "00:00:00"
-  - delay:
-      seconds: 90
-  - repeat:
-      for_each:
-        - entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_start
-          name: "Charge Slot 1 Start"
-        - entity_id: time.hanchuess_YOURSERIAL_charge_slot_1_end
-          name: "Charge Slot 1 End"
-      sequence:
-        - if:
-            - condition: template
-              value_template: "{{ states(repeat.item.entity_id) != '00:00:00' }}"
-          then:
-            - action: time.set_value
-              target:
-                entity_id: "{{ repeat.item.entity_id }}"
-              data:
-                time: "00:00:00"
-            - delay:
-                seconds: 30
-            - if:
-                - condition: template
-                  value_template: "{{ states(repeat.item.entity_id) != '00:00:00' }}"
-              then:
-                - action: notify.mobile_app_YOUR_DEVICE
-                  data:
-                    title: "⚠️ Hanchu charge stop FAILED"
-                    message: >-
-                      {{ repeat.item.name }} still not 00:00:00 after retry —
-                      charging may continue at peak rate, check manually.
+      sn: YOURSERIAL
+      dev_type: "2"
+      value:
+        TCT_START_1: 0
+        TCT_END_1: 0
+    response_variable: result
+  - if:
+      - condition: template
+        value_template: "{{ not result.success }}"
+    then:
+      - delay:
+          seconds: 5
+      - action: hanchuess.device_control
+        data:
+          sn: YOURSERIAL
+          dev_type: "2"
+          value:
+            TCT_START_1: 0
+            TCT_END_1: 0
+        response_variable: result2
+      - if:
+          - condition: template
+            value_template: "{{ not result2.success }}"
+        then:
+          - action: notify.notify
+            data:
+              title: ⚠️ Hanchu charge stop FAILED
+              message: "Charge stop write failed after retry ({{ result2.message }}) — check manually."
 
 alias: Predbat Bridge - Start Discharge
 triggers:
@@ -448,52 +334,41 @@ triggers:
     to: "on"
     trigger: state
 variables:
-  target_start: "{{ now().strftime('%H:%M:%S') }}"
-  target_end: "23:59:00"
+  start_seconds: "{{ (now() - now().replace(hour=0, minute=0, second=0, microsecond=0)).seconds }}"
+  end_seconds: 86340  # 23:59:00
 actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
+  - action: hanchuess.device_control
     data:
-      time: "{{ target_start }}"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
-    data:
-      time: "{{ target_end }}"
-  - delay:
-      seconds: 90
-  - repeat:
-      for_each:
-        - entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
-          name: "Discharge Slot 1 Start"
-          target: "{{ target_start }}"
-        - entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
-          name: "Discharge Slot 1 End"
-          target: "{{ target_end }}"
-      sequence:
-        - if:
-            - condition: template
-              value_template: "{{ states(repeat.item.entity_id) != repeat.item.target }}"
-          then:
-            - action: time.set_value
-              target:
-                entity_id: "{{ repeat.item.entity_id }}"
-              data:
-                time: "{{ repeat.item.target }}"
-            - delay:
-                seconds: 30
-            - if:
-                - condition: template
-                  value_template: "{{ states(repeat.item.entity_id) != repeat.item.target }}"
-              then:
-                - action: notify.mobile_app_YOUR_DEVICE
-                  data:
-                    title: "⚠️ Hanchu discharge start FAILED"
-                    message: >-
-                      {{ repeat.item.name }} still not {{ repeat.item.target }}
-                      after retry — discharge window may be wrong or stale
-                      from a previous cycle, check manually.
+      sn: YOURSERIAL
+      dev_type: "2"
+      value:
+        TDT_START_1: "{{ start_seconds }}"
+        TDT_END_1: "{{ end_seconds }}"
+    response_variable: result
+  - if:
+      - condition: template
+        value_template: "{{ not result.success }}"
+    then:
+      - delay:
+          seconds: 5
+      - action: hanchuess.device_control
+        data:
+          sn: YOURSERIAL
+          dev_type: "2"
+          value:
+            TDT_START_1: "{{ start_seconds }}"
+            TDT_END_1: "{{ end_seconds }}"
+        response_variable: result2
+      - if:
+          - condition: template
+            value_template: "{{ not result2.success }}"
+        then:
+          - action: notify.notify
+            data:
+              title: ⚠️ Hanchu discharge start FAILED
+              message: >-
+                Discharge start/end write failed after retry ({{ result2.message }}) —
+                discharge window may not be set, check manually.
 
 alias: Predbat Bridge - Stop Discharge
 triggers:
@@ -501,48 +376,39 @@ triggers:
     to: "off"
     trigger: state
 actions:
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
+  - action: hanchuess.device_control
     data:
-      time: "00:00:00"
-  - action: time.set_value
-    target:
-      entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
-    data:
-      time: "00:00:00"
-  - delay:
-      seconds: 90
-  - repeat:
-      for_each:
-        - entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_start
-          name: "Discharge Slot 1 Start"
-        - entity_id: time.hanchuess_YOURSERIAL_discharge_slot_1_end
-          name: "Discharge Slot 1 End"
-      sequence:
-        - if:
-            - condition: template
-              value_template: "{{ states(repeat.item.entity_id) != '00:00:00' }}"
-          then:
-            - action: time.set_value
-              target:
-                entity_id: "{{ repeat.item.entity_id }}"
-              data:
-                time: "00:00:00"
-            - delay:
-                seconds: 30
-            - if:
-                - condition: template
-                  value_template: "{{ states(repeat.item.entity_id) != '00:00:00' }}"
-              then:
-                - action: notify.mobile_app_YOUR_DEVICE
-                  data:
-                    title: "⚠️ Hanchu discharge stop FAILED"
-                    message: >-
-                      {{ repeat.item.name }} still not 00:00:00 after retry —
-                      battery may be discharging unexpectedly, check manually.
+      sn: YOURSERIAL
+      dev_type: "2"
+      value:
+        TDT_START_1: 0
+        TDT_END_1: 0
+    response_variable: result
+  - if:
+      - condition: template
+        value_template: "{{ not result.success }}"
+    then:
+      - delay:
+          seconds: 5
+      - action: hanchuess.device_control
+        data:
+          sn: YOURSERIAL
+          dev_type: "2"
+          value:
+            TDT_START_1: 0
+            TDT_END_1: 0
+        response_variable: result2
+      - if:
+          - condition: template
+            value_template: "{{ not result2.success }}"
+        then:
+          - action: notify.notify
+            data:
+              title: ⚠️ Hanchu discharge stop FAILED
+              message: "Discharge stop write failed after retry ({{ result2.message }}) — check manually."
 ```
-Replace YOURSERIAL and notify.mobile_app_YOUR_DEVICE with your own values.
+
+Replace `YOURSERIAL` and `notify.notify` (with your actual mobile app notify service) throughout. This pattern retries once on failure and sends a notification if both attempts fail, so a failed write is never silent.
 
 ## Development
 
