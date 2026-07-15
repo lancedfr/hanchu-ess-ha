@@ -10,7 +10,7 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
-## [v2.0.0] 2026-07-15
+## [v2.0.0] - 2026-07-15
 
 ### Added
 - `button.py` new integration platform registering the Read Settings and Write
