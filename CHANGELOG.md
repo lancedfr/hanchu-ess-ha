@@ -10,6 +10,8 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-07-16
+
 ### Fixed
 - **`hanchuess.device_control` service and Lovelace card Load/Set buttons** 
   now refreshes the corresponding control entities (Work Mode, charge/discharge power and SOC limits, all time slots)
@@ -265,7 +267,8 @@ act on it straight away must now call `hanchuess.write_settings` after the write
 - Initial fork of the original integration with read-only battery, grid, PV, and
   load sensors and the custom Lovelace card.
 
-[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/upton68/hanchu-ess-ha/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/upton68/hanchu-ess-ha/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.1...v2.0.0
 [1.4.1]: https://github.com/upton68/hanchu-ess-ha/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/upton68/hanchu-ess-ha/compare/v1.3.0...v1.4.0
