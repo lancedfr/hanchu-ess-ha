@@ -159,6 +159,18 @@ async def async_device_control_service(hass: HomeAssistant, call: ServiceCall) -
         inverter_serial_number, dev_type, value
     )
     if result.get("success"):
+        entry = _find_entry(hass, inverter_serial_number)
+        if entry is not None:
+            from .button import apply_iot_values
+
+            apply_iot_values(entry, value)
+            entry.runtime_data.staging.discard(value.keys())
+        else:
+            _LOGGER.warning(
+                "[HANCHUESS] device_control: no config entry found for %s, "
+                "skipping control entity sync",
+                inverter_serial_number,
+            )
         return {"success": True, "message": "OK"}
 
     message = result.get("msg", "Unknown error")
@@ -363,6 +375,17 @@ async def ws_iot_get(hass, connection, msg):
         )
         return
     result = await coordinator.client.async_iot_get(inverter_serial_number, dev_type, keys)
+    entry = _find_entry(hass, inverter_serial_number)
+    if entry is not None:
+        from .button import apply_iot_values
+
+        apply_iot_values(entry, result)
+    else:
+        _LOGGER.warning(
+            "[HANCHUESS] ws_iot_get: no config entry found for %s, "
+            "skipping control entity sync",
+            inverter_serial_number,
+        )
     connection.send_result(msg["id"], result)
 
 
@@ -393,6 +416,18 @@ async def ws_iot_set(hass, connection, msg):
         inverter_serial_number, dev_type, value
     )
     if result.get("success"):
+        entry = _find_entry(hass, inverter_serial_number)
+        if entry is not None:
+            from .button import apply_iot_values
+
+            apply_iot_values(entry, value)
+            entry.runtime_data.staging.discard(value.keys())
+        else:
+            _LOGGER.warning(
+                "[HANCHUESS] ws_iot_set: no config entry found for %s, "
+                "skipping control entity sync",
+                inverter_serial_number,
+            )
         connection.send_result(msg["id"], result.get("data", {}))
     else:
         connection.send_error(msg["id"], "control_failed", result.get("msg", "Unknown error"))

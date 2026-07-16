@@ -47,6 +47,19 @@ class SettingsStagingBuffer:
         self.pending.clear()
         self._notify()
 
+    def discard(self, keys) -> None:
+        """Remove specific pending settings (e.g. superseded by a direct write).
+
+        Triggers on_change only if something was actually removed.
+        """
+        removed = False
+        for key in keys:
+            if key in self.pending:
+                del self.pending[key]
+                removed = True
+        if removed:
+            self._notify()
+
     # ------------------------------------------------------------------
     # Read-only helpers
     # ------------------------------------------------------------------

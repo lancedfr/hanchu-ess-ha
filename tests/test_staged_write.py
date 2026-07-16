@@ -240,6 +240,47 @@ async def test_flush_leaves_buffer_intact_on_double_failure():
 
 
 # ---------------------------------------------------------------------------
+# SettingsStagingBuffer.discard
+# ---------------------------------------------------------------------------
+
+def test_discard_removes_only_specified_keys():
+    staging = SettingsStagingBuffer()
+    staging.stage("CHG_PWR_LMT", 2000)
+    staging.stage("WORK_MODE_CMB", "1")
+    staging.stage("DSCHG_PWR_LMT", 1500)
+
+    staging.discard(["CHG_PWR_LMT", "WORK_MODE_CMB"])
+
+    assert staging.pending == {"DSCHG_PWR_LMT": 1500}
+
+
+def test_discard_missing_key_is_noop_and_does_not_notify():
+    staging = SettingsStagingBuffer()
+    staging.stage("CHG_PWR_LMT", 2000)
+    on_change = MagicMock()
+    staging.set_on_change(on_change)
+    on_change.reset_mock()
+
+    staging.discard(["UNKNOWN_KEY"])
+
+    assert staging.pending == {"CHG_PWR_LMT": 2000}
+    on_change.assert_not_called()
+
+
+def test_discard_notifies_when_something_removed():
+    staging = SettingsStagingBuffer()
+    staging.stage("CHG_PWR_LMT", 2000)
+    on_change = MagicMock()
+    staging.set_on_change(on_change)
+    on_change.reset_mock()
+
+    staging.discard(["CHG_PWR_LMT"])
+
+    assert staging.pending == {}
+    on_change.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # apply_iot_values — read-back refresh
 # ---------------------------------------------------------------------------
 
