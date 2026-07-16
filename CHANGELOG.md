@@ -10,6 +10,14 @@ later versions are tracked here going forward.
 
 ## [Unreleased]
 
+### Fixed
+- **`hanchuess.device_control` service and Lovelace card Load/Set buttons** 
+  now refreshes the corresponding control entities (Work Mode, charge/discharge power and SOC limits, all time slots)
+  immediately after a successful write, instead of leaving them stale until
+  "Read Settings" is pressed. Any conflicting staged-but-unwritten value for the
+  same key is also discarded so a later "Write Settings" press can't overwrite
+  the direct write.
+
 ## [2.0.0] - 2026-07-15
 
 ### Added

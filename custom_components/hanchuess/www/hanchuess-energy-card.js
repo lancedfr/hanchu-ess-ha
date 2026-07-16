@@ -1514,7 +1514,6 @@ class HanchuessEnergyCard extends HTMLElement {
           }
         });
 
-        await this._clearStaging();
         statusMsg.textContent = _t(this._hass, 'submit_success');
         statusMsg.className = "status success";
       } catch (err) {
